@@ -236,6 +236,15 @@ async function cloudPush(){
     syncState='☁️ Sincronizado às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   }catch(e){syncState='⚠️ Falha ao enviar: '+(e.message||'rede');toast('⚠️ Sync falhou — dados salvos localmente')}
 }
+async function findGist(){
+  try{
+    const r=await fetch('https://api.github.com/gists?per_page=100',{headers:ghHeaders()});
+    if(!r.ok)return;
+    const list=await r.json();
+    const hit=list.find(g=>g.files&&g.files[GIST_FILE]);
+    if(hit){gistId=hit.id;await sSet(K_GIST,gistId)}
+  }catch(e){}
+}
 async function touchAndPush(){
   updatedAt=Date.now();
   await sSet(K_UPD,updatedAt);
@@ -415,6 +424,12 @@ function renderData(){
       <button class="btn ghost" id="ghsave" style="margin-top:10px">Salvar token e ativar</button>
     </details>
     ${ghToken?`<button class="btn ghost" id="ghsync" style="margin-top:10px">Sincronizar agora</button>`:''}
+    <details style="margin-top:10px">
+      <summary>Gist ID (forçar mesmo Gist em todos os aparelhos)</summary>
+      <p class="note" style="margin:8px 0 10px">Se cada aparelho criou um Gist próprio, cole aqui o ID correto (o mesmo do outro aparelho) e confirme. O ID aparece no rodapé desta seção e na URL do gist em gist.github.com.</p>
+      <input type="text" id="ghgist" placeholder="ex.: a1b2c3d4e5..." value="${esc(gistId||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
+      <button class="btn ghost" id="ghgistsave" style="margin-top:10px">Usar este Gist</button>
+    </details>
     ${syncState?`<p class="note" style="margin-top:10px;font-family:var(--mono);font-size:12px">${esc(syncState)}</p>`:''}
     ${gistId?`<p class="note" style="margin-top:6px;font-size:11px;color:var(--faint)">Gist: <span class="tag">${esc(gistId)}</span></p>`:''}
   </div>
@@ -460,6 +475,7 @@ function renderData(){
     await sSet(K_GH,ghToken);
     if(!ghToken){toast('Token removido');renderData();return}
     toast('Conectando…');
+    if(!gistId)await findGist();
     if(gistId)await cloudPull();
     if(!updatedAt)updatedAt=Date.now(),await sSet(K_UPD,updatedAt);
     await cloudPush();
@@ -470,6 +486,16 @@ function renderData(){
     toast('Sincronizando…');
     await cloudPull();
     await cloudPush();
+    renderData();
+  };
+  const ghg=document.getElementById('ghgistsave');
+  if(ghg)ghg.onclick=async()=>{
+    const v=document.getElementById('ghgist').value.trim();
+    if(!v){toast('Cole o ID do Gist');return}
+    gistId=v;await sSet(K_GIST,gistId);
+    toast('Verificando…');
+    updatedAt=0;await sSet(K_UPD,0);
+    await cloudPull();
     renderData();
   };
   document.getElementById('expjson').onclick=exportJSON;
