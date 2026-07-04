@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Progressão — Upper/Lower 3×</title>
+<style>
+:root{
+  --bg:#101214; --surface:#1a1d21; --surface2:#22262b; --border:#2b3138;
+  --text:#e9ebee; --muted:#8b929b; --faint:#5c636c;
+  --up:#4ade80; --keep:#fbbf24; --hold:#f87171; --accent:#f5a623;
+  --radius:14px;
+  --mono:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding-bottom:90px}
+.wrap{max-width:640px;margin:0 auto;padding:0 14px}
+
+/* header */
+header{padding:22px 0 14px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--accent);text-transform:uppercase}
+h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-top:2px}
+h1 small{display:block;font-size:13px;font-weight:500;color:var(--muted);letter-spacing:0;margin-top:3px}
+.barload{display:flex;gap:3px;margin-top:12px;height:6px}
+.barload span{flex:1;border-radius:2px;background:var(--surface2)}
+.barload span.on{background:var(--accent)}
+
+/* tabs */
+nav{position:fixed;bottom:0;left:0;right:0;background:rgba(16,18,20,.96);backdrop-filter:blur(10px);border-top:1px solid var(--border);display:flex;z-index:50}
+nav button{flex:1;padding:13px 4px max(13px,env(safe-area-inset-bottom));background:none;border:none;color:var(--faint);font:600 12px/1 inherit;letter-spacing:.04em;cursor:pointer}
+nav button .ic{display:block;font-size:18px;margin-bottom:4px}
+nav button.active{color:var(--accent)}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.card h3{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.sub{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:2px}
+
+/* workout chips */
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.chip{padding:9px 16px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-weight:700;font-size:14px;cursor:pointer}
+.chip.sel{background:var(--accent);border-color:var(--accent);color:#131313}
+
+/* suggestion badge — plate edge signature */
+.decide{display:flex;align-items:center;gap:10px;margin:10px 0 12px;padding:9px 12px;border-radius:10px;background:var(--surface2);border-left:5px solid var(--faint);font-size:13px}
+.decide b{font-family:var(--mono);font-size:13px;letter-spacing:.06em}
+.decide.up{border-left-color:var(--up)} .decide.up b{color:var(--up)}
+.decide.keep{border-left-color:var(--keep)} .decide.keep b{color:var(--keep)}
+.decide.hold{border-left-color:var(--hold)} .decide.hold b{color:var(--hold)}
+.decide.stall{border-left-color:#c084fc} .decide.stall b{color:#c084fc}
+.decide.first{border-left-color:var(--faint)} .decide.first b{color:var(--muted)}
+
+/* set rows */
+.sethead,.setrow{display:grid;grid-template-columns:34px 1fr 1fr 1fr;gap:8px;align-items:center}
+.sethead{font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;padding:0 2px}
+.setrow{margin-bottom:8px}
+.setrow .n{font-family:var(--mono);font-size:13px;color:var(--faint);text-align:center}
+.setrow input{width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 16px var(--mono);text-align:center;-moz-appearance:textfield}
+.setrow input::-webkit-outer-spin-button,.setrow input::-webkit-inner-spin-button{-webkit-appearance:none}
+.setrow input:focus{outline:none;border-color:var(--accent)}
+.setrow input.done{border-color:#3a4a3f}
+
+/* buttons */
+.btn{display:block;width:100%;padding:15px;border:none;border-radius:12px;background:var(--accent);color:#131313;font:800 16px inherit;letter-spacing:.01em;cursor:pointer;margin-top:6px}
+.btn:active{transform:scale(.98)}
+.btn.ghost{background:var(--surface2);color:var(--text);font-weight:600;font-size:14px;padding:12px;border:1px solid var(--border)}
+.btn.danger{background:none;border:1px solid #4a2b2b;color:var(--hold)}
+.btn:disabled{opacity:.45}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* program editor */
+.exedit{background:var(--surface2);border-radius:10px;padding:12px;margin-top:10px}
+.exedit input[type=text]{width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font:600 14px inherit;margin-bottom:8px}
+.grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.fld label{display:block;font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+.fld input{width:100%;padding:9px 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font:600 14px var(--mono);text-align:center}
+.mini{background:none;border:none;color:var(--muted);font:600 13px inherit;cursor:pointer;padding:6px 8px}
+.mini.red{color:var(--hold)}
+.mini.up2{color:var(--accent)}
+.exhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.drag{color:var(--faint);font-size:15px}
+
+/* history */
+.hist{border-bottom:1px solid var(--border);padding:12px 2px}
+.hist:last-child{border:none}
+.hist .d{font-family:var(--mono);font-size:12px;color:var(--accent)}
+.hist .t{font-weight:700;margin:1px 0 4px}
+.hist .s{font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7}
+
+/* misc */
+.note{font-size:13px;color:var(--muted);line-height:1.55}
+.note b{color:var(--text)}
+details{margin-top:10px}
+summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--accent);list-style:none}
+summary::before{content:'▸ '}
+details[open] summary::before{content:'▾ '}
+details .note{margin-top:8px}
+/* AI */
+.ai-out{background:var(--surface2);border-radius:10px;padding:14px;margin-top:12px;font-size:14px;line-height:1.65}
+.ai-out p{margin:0 0 8px}
+.ai-out h4{font-size:14px;color:var(--accent);margin:10px 0 4px}
+.ai-out ul{margin:6px 0 10px 18px}
+.ai-out li{margin-bottom:4px}
+textarea#aiq{width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:inherit;resize:vertical;min-height:60px}
+textarea#aiq:focus{outline:none;border-color:var(--accent)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--faint);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.empty{text-align:center;color:var(--faint);padding:30px 10px;font-size:14px}
+.tag{font-family:var(--mono);font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted)}
+.loading{text-align:center;padding:60px 0;color:var(--faint);font-family:var(--mono);font-size:13px;letter-spacing:.1em}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Dupla progressão autorregulada</div>
+    <h1>Progressão de Carga <small>Upper · Lower · 3×/semana — V-taper</small></h1>
+    <div class="barload" id="weekbar"></div>
+  </header>
+  <main id="view"><div class="loading">CARREGANDO…</div></main>
+</div>
+
+<nav>
+  <button data-tab="train" class="active"><span class="ic">🏋️</span>Treinar</button>
+  <button data-tab="program"><span class="ic">📋</span>Programa</button>
+  <button data-tab="ai"><span class="ic">🧠</span>Análise</button>
+  <button data-tab="data"><span class="ic">📤</span>Dados</button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ state & storage ============ */
+const K_PROG='ul_program_v1', K_HIST='ul_history_v1', K_KEY='ul_apikey_v1', K_MODEL='ul_aimodel_v1', K_GH='ul_ghtoken_v1', K_GIST='ul_gist_v1', K_UPD='ul_updated_v1';
+let program=[], history=[], tab='train', selWorkout=null, memOnly=false, apiKey='', aiModel='gemini-2.5-flash', ghToken='', gistId='', updatedAt=0, syncState='';
+
+const uid=()=>Math.random().toString(36).slice(2,9);
+
+function defaultProgram(){
+  const ex=(name,sets,repMin,repMax,rirMin,rirMax,inc)=>({id:uid(),name,sets,repMin,repMax,rirMin,rirMax,inc});
+  return [
+    {id:uid(),name:'Upper A',exercises:[
+      ex('Puxada Alta na Polia (pronada aberta)',4,6,8,2,2,2.5),
+      ex('Supino Inclinado (Halter)',3,8,10,1,2,2),
+      ex('Remada Máquina Fechada',4,8,10,1,2,2.5),
+      ex('Prensa de Ombros Sentada (Máquina)',3,8,10,1,2,2.5),
+      ex('Elevação Lateral Unilateral (Cabo)',4,12,15,0,1,1.25),
+      ex('Rosca Direta na Barra W',3,8,10,1,1,2),
+      ex('Tríceps na Polia (Corda)',3,10,12,1,1,1.25)]},
+    {id:uid(),name:'Upper B',exercises:[
+      ex('Remada Baixa no Cabo (Triângulo)',4,8,10,1,2,2.5),
+      ex('Supino Reto (Barra ou Máquina)',3,6,8,2,3,2.5),
+      ex('Pulley Frente Pegada Fechada (ou Pullover Cabo)',3,10,12,1,2,2.5),
+      ex('Crucifixo na Polia (Crossover)',3,12,15,0,1,1.25),
+      ex('Elevação Lateral (Halter ou Cabo)',4,12,15,0,1,1.25),
+      ex('Face Pull com Corda',4,15,20,0,1,1.25),
+      ex('Rosca Martelo',3,10,12,1,1,2),
+      ex('Tríceps Francês (Halter)',3,10,12,1,1,2)]},
+    {id:uid(),name:'Lower',exercises:[
+      ex('Agachamento Livre',3,6,8,2,3,2.5),
+      ex('Leg Press 45°',3,10,12,1,2,5),
+      ex('Mesa Flexora',4,10,12,1,1,2.5),
+      ex('Hip Thrust Máquina (ou Ext. Lombar 45°)',3,10,12,1,2,2.5),
+      ex('Cadeira Extensora',3,12,15,1,1,2.5),
+      ex('Panturrilha em Pé',4,12,15,1,1,2.5),
+      ex('Abdominal Infra (Elevação de Pernas)',3,12,15,1,1,0)]}
+  ];
+}
+
+async function sGet(k){
+  if(window.storage){try{const r=await window.storage.get(k);return r?JSON.parse(r.value):null}catch(e){return null}}
+  try{const v=localStorage.getItem('pt_'+k);return v?JSON.parse(v):null}catch(e){return null}
+}
+async function sSet(k,v){
+  if(window.storage){try{await window.storage.set(k,JSON.stringify(v));return}catch(e){}}
+  try{localStorage.setItem('pt_'+k,JSON.stringify(v))}catch(e){memOnly=true}
+}
+
+async function boot(){
+  program=await sGet(K_PROG)||[];
+  history=await sGet(K_HIST)||[];
+  apiKey=await sGet(K_KEY)||'';
+  aiModel=await sGet(K_MODEL)||'gemini-2.5-flash';
+  ghToken=await sGet(K_GH)||'';
+  gistId=await sGet(K_GIST)||'';
+  updatedAt=await sGet(K_UPD)||0;
+  if(ghToken&&gistId)await cloudPull();
+  if(!program.length){program=defaultProgram();await saveProgram()}
+  selWorkout=program[0]?.id;
+  render();
+  if(memOnly)toast('⚠️ Sem armazenamento — dados só nesta sessão');
+}
+async function saveProgram(){await sSet(K_PROG,program)}
+async function saveHistory(){await sSet(K_HIST,history)}
+
+/* ============ cloud sync (GitHub Gist) ============ */
+const GIST_FILE='progressao-treino.json';
+const ghHeaders=()=>({'Authorization':'Bearer '+ghToken,'Accept':'application/vnd.github+json','Content-Type':'application/json'});
+async function cloudPull(){
+  try{
+    const r=await fetch('https://api.github.com/gists/'+gistId,{headers:ghHeaders()});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const g=await r.json();
+    const f=g.files&&g.files[GIST_FILE];
+    if(!f)throw new Error('arquivo não encontrado no gist');
+    let content=f.content;
+    if(f.truncated){const rr=await fetch(f.raw_url);content=await rr.text()}
+    const data=JSON.parse(content);
+    if((data.updatedAt||0)>(updatedAt||0)){
+      if(Array.isArray(data.program))program=data.program;
+      if(Array.isArray(data.history))history=data.history;
+      updatedAt=data.updatedAt||Date.now();
+      await sSet(K_PROG,program);await sSet(K_HIST,history);await sSet(K_UPD,updatedAt);
+      syncState='☁️ Baixado da nuvem — '+new Date(updatedAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    }else{
+      syncState='☁️ Local já está atualizado';
+    }
+  }catch(e){syncState='⚠️ Falha ao baixar: '+(e.message||'rede')}
+}
+async function cloudPush(){
+  if(!ghToken)return;
+  try{
+    const payload={description:'Progressão de treino — dados (auto-sync)',public:false,files:{}};
+    payload.files[GIST_FILE]={content:JSON.stringify({program,history,updatedAt})};
+    let r;
+    if(gistId){
+      r=await fetch('https://api.github.com/gists/'+gistId,{method:'PATCH',headers:ghHeaders(),body:JSON.stringify(payload)});
+    }else{
+      r=await fetch('https://api.github.com/gists',{method:'POST',headers:ghHeaders(),body:JSON.stringify(payload)});
+      if(r.ok){const g=await r.json();gistId=g.id;await sSet(K_GIST,gistId)}
+    }
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    syncState='☁️ Sincronizado às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){syncState='⚠️ Falha ao enviar: '+(e.message||'rede');toast('⚠️ Sync falhou — dados salvos localmente')}
+}
+async function touchAndPush(){
+  updatedAt=Date.now();
+  await sSet(K_UPD,updatedAt);
+  if(ghToken)cloudPush();
+}
+
+/* ============ progression algorithm ============ */
+/* Autoregulated Double Progression (Helms) + stall detection */
+function lastEntries(exId,n){
+  const out=[];
+  for(let i=history.length-1;i>=0&&out.length<n;i--){
+    const e=history[i].entries.find(x=>x.exId===exId);
+    if(e&&e.sets.some(s=>s.w!=null||s.r!=null))out.push({date:history[i].date,sets:e.sets});
+  }
+  return out;
+}
+function suggest(ex){
+  const prev=lastEntries(ex.id,4);
+  if(!prev.length)return{type:'first',w:null,label:'PRIMEIRA SESSÃO',msg:`Escolha uma carga que dê ${ex.repMin}–${ex.repMax} reps com RIR ${ex.rirMin}${ex.rirMax!==ex.rirMin?'–'+ex.rirMax:''}.`};
+  const last=prev[0];
+  const w=Math.max(...last.sets.map(s=>+s.w||0));
+  const valid=last.sets.filter(s=>s.r!=null&&s.r!=='');
+  const topAll=valid.length>0&&valid.every(s=>+s.r>=ex.repMax&&(+s.rir)>=ex.rirMin);
+  const anyBelow=valid.some(s=>+s.r<ex.repMin);
+  const ground=valid.some(s=>+s.r<ex.repMin&&+s.rir===0);
+  // stall: 3+ sessions at same top weight without topAll
+  let stall=0;
+  for(const p of prev){
+    const pw=Math.max(...p.sets.map(s=>+s.w||0));
+    const pv=p.sets.filter(s=>s.r!=null&&s.r!=='');
+    const pTop=pv.length>0&&pv.every(s=>+s.r>=ex.repMax&&(+s.rir)>=ex.rirMin);
+    if(pw===w&&!pTop)stall++;else break;
+  }
+  if(topAll&&ex.inc>0)return{type:'up',w:round25(w+ex.inc),label:'SOBE CARGA',msg:`Topo da faixa atingido em todas as séries → ${fmt(w)} + ${fmt(ex.inc)} kg.`};
+  if(topAll)return{type:'up',w,label:'PROGRIDE',msg:'Topo atingido — adicione 1 rep acima da faixa ou reduza o RIR.'};
+  if(stall>=3){const d=round25(w*0.9);return{type:'stall',w:d,label:'ESTAGNOU — MICRODELOAD',msg:`${stall} sessões sem progresso em ${fmt(w)} kg. Recue ~10% (${fmt(d)} kg) e reconstrua, ou troque o exercício.`}}
+  if(ground)return{type:'hold',w:ex.inc>0?round25(Math.max(0,w-ex.inc)):w,label:'SEGURA / REDUZ',msg:`Reps abaixo da faixa com RIR 0 → recue ${fmt(ex.inc)} kg e domine a faixa.`};
+  if(anyBelow)return{type:'hold',w,label:'SEGURA CARGA',msg:'Alguma série abaixo da faixa — mantenha o peso até entrar na faixa completa.'};
+  return{type:'keep',w,label:'MANTÉM — BUSCA REPS',msg:`Mantenha ${fmt(w)} kg e tente +1 rep por série até chegar em ${ex.repMax}.`};
+}
+const round25=v=>Math.round(v/0.25)*0.25;
+const fmt=v=>(+v).toLocaleString('pt-BR',{maximumFractionDigits:2});
+
+/* ============ render ============ */
+const view=document.getElementById('view');
+function render(){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  weekbar();
+  if(tab==='train')renderTrain();
+  else if(tab==='program')renderProgram();
+  else if(tab==='ai')renderAI();
+  else renderData();
+}
+function weekbar(){
+  const el=document.getElementById('weekbar');el.innerHTML='';
+  const now=new Date();const monday=new Date(now);monday.setDate(now.getDate()-((now.getDay()+6)%7));monday.setHours(0,0,0,0);
+  const count=history.filter(h=>new Date(h.date)>=monday).length;
+  for(let i=0;i<3;i++){const s=document.createElement('span');if(i<count)s.className='on';el.appendChild(s)}
+}
+
+/* ---- TRAIN ---- */
+function renderTrain(){
+  if(!program.length){view.innerHTML='<div class="empty">Nenhum treino no programa. Crie um na aba Programa.</div>';return}
+  if(!program.find(w=>w.id===selWorkout))selWorkout=program[0].id;
+  const wo=program.find(w=>w.id===selWorkout);
+  let h=`<div class="chips">${program.map(w=>`<button class="chip ${w.id===selWorkout?'sel':''}" data-wo="${w.id}">${esc(w.name)}</button>`).join('')}</div>`;
+  h+=wo.exercises.map(ex=>{
+    const sg=suggest(ex);
+    const pre=sg.w!=null?sg.w:'';
+    return `<div class="card" data-ex="${ex.id}">
+      <h3>${esc(ex.name)}</h3>
+      <div class="sub">${ex.sets} × ${ex.repMin}–${ex.repMax} reps · RIR ${ex.rirMin}${ex.rirMax!==ex.rirMin?'–'+ex.rirMax:''} · +${fmt(ex.inc)} kg</div>
+      <div class="decide ${sg.type}"><b>${sg.label}${sg.w!=null?' · '+fmt(sg.w)+' kg':''}</b></div>
+      <div class="note" style="margin:-4px 0 10px;font-size:12.5px">${sg.msg}</div>
+      <div class="sethead"><span>#</span><span>Carga kg</span><span>Reps</span><span>RIR</span></div>
+      ${Array.from({length:ex.sets},(_,i)=>`
+        <div class="setrow"><span class="n">${i+1}</span>
+          <input type="number" inputmode="decimal" step="0.25" placeholder="${pre!==''?fmt(pre):'—'}" value="${pre!==''?pre:''}" data-f="w" data-i="${i}">
+          <input type="number" inputmode="numeric" placeholder="${ex.repMin}–${ex.repMax}" data-f="r" data-i="${i}">
+          <input type="number" inputmode="numeric" placeholder="${ex.rirMin}" data-f="rir" data-i="${i}">
+        </div>`).join('')}
+    </div>`;
+  }).join('');
+  h+=`<button class="btn" id="saveSession">Salvar sessão — ${esc(wo.name)}</button>`;
+  view.innerHTML=h;
+  view.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{selWorkout=c.dataset.wo;render()});
+  view.querySelectorAll('.setrow input').forEach(i=>i.addEventListener('input',()=>i.classList.toggle('done',i.value!=='')));
+  document.getElementById('saveSession').onclick=saveSession;
+}
+async function saveSession(){
+  const wo=program.find(w=>w.id===selWorkout);
+  const entries=[];
+  view.querySelectorAll('.card[data-ex]').forEach(card=>{
+    const exId=card.dataset.ex;
+    const ex=wo.exercises.find(e=>e.id===exId);
+    const sets=Array.from({length:ex.sets},()=>({w:null,r:null,rir:null}));
+    card.querySelectorAll('input').forEach(inp=>{
+      const i=+inp.dataset.i,f=inp.dataset.f;
+      if(inp.value!=='')sets[i][f]=+inp.value;
+      else if(f==='w'&&inp.placeholder!=='—')sets[i].w=null;
+    });
+    if(sets.some(s=>s.r!=null))entries.push({exId,exName:ex.name,sets});
+  });
+  if(!entries.length){toast('Preencha ao menos as reps de 1 exercício');return}
+  history.push({id:uid(),date:new Date().toISOString(),workoutId:wo.id,workoutName:wo.name,entries});
+  await saveHistory();
+  await touchAndPush();
+  toast('✓ Sessão salva');
+  render();
+}
+
+/* ---- PROGRAM (editable) ---- */
+function renderProgram(){
+  let h=program.map((wo,wi)=>`<div class="card">
+    <div class="exhead">
+      <input type="text" value="${esc(wo.name)}" data-wname="${wo.id}" style="background:none;border:none;color:var(--text);font:800 17px inherit;width:60%">
+      <span>
+        <button class="mini up2" data-addex="${wo.id}">+ exercício</button>
+        <button class="mini red" data-delwo="${wo.id}">excluir</button>
+      </span>
+    </div>
+    ${wo.exercises.map((ex,ei)=>`<div class="exedit" data-exid="${ex.id}">
+      <div class="exhead" style="margin-bottom:8px">
+        <span class="drag">${ei>0?`<button class="mini" data-mvup="${wo.id}|${ex.id}">↑</button>`:''}${ei<wo.exercises.length-1?`<button class="mini" data-mvdn="${wo.id}|${ex.id}">↓</button>`:''}</span>
+        <button class="mini red" data-delex="${wo.id}|${ex.id}">remover</button>
+      </div>
+      <input type="text" value="${esc(ex.name)}" data-e="name">
+      <div class="grid6">
+        <div class="fld"><label>Séries</label><input type="number" value="${ex.sets}" data-e="sets" min="1" max="10"></div>
+        <div class="fld"><label>Rep mín</label><input type="number" value="${ex.repMin}" data-e="repMin"></div>
+        <div class="fld"><label>Rep máx</label><input type="number" value="${ex.repMax}" data-e="repMax"></div>
+        <div class="fld"><label>RIR mín</label><input type="number" value="${ex.rirMin}" data-e="rirMin"></div>
+        <div class="fld"><label>RIR máx</label><input type="number" value="${ex.rirMax}" data-e="rirMax"></div>
+        <div class="fld"><label>Incr. kg</label><input type="number" step="0.25" value="${ex.inc}" data-e="inc"></div>
+      </div>
+    </div>`).join('')}
+  </div>`).join('');
+  h+=`<button class="btn ghost" id="addwo">+ Adicionar treino</button>
+      <button class="btn" id="saveprog" style="margin-top:10px">Salvar programa</button>
+      <p class="note" style="margin-top:12px">As mudanças aqui atualizam automaticamente a lista da aba <b>Treinar</b>. O histórico antigo é preservado — a progressão de um exercício segue pelo seu registro, mesmo se você renomear.</p>`;
+  view.innerHTML=h;
+  document.getElementById('addwo').onclick=()=>{program.push({id:uid(),name:'Novo treino',exercises:[]});renderProgram()};
+  document.getElementById('saveprog').onclick=async()=>{harvest();await saveProgram();await touchAndPush();toast('✓ Programa salvo');};
+  view.querySelectorAll('[data-addex]').forEach(b=>b.onclick=()=>{harvest();const wo=program.find(w=>w.id===b.dataset.addex);wo.exercises.push({id:uid(),name:'Novo exercício',sets:3,repMin:8,repMax:10,rirMin:1,rirMax:2,inc:2.5});renderProgram()});
+  view.querySelectorAll('[data-delwo]').forEach(b=>b.onclick=()=>{if(confirm('Excluir este treino?')){harvest();program=program.filter(w=>w.id!==b.dataset.delwo);renderProgram()}});
+  view.querySelectorAll('[data-delex]').forEach(b=>b.onclick=()=>{harvest();const[wid,eid]=b.dataset.delex.split('|');const wo=program.find(w=>w.id===wid);wo.exercises=wo.exercises.filter(e=>e.id!==eid);renderProgram()});
+  const mv=(wid,eid,d)=>{harvest();const wo=program.find(w=>w.id===wid);const i=wo.exercises.findIndex(e=>e.id===eid);const j=i+d;if(j<0||j>=wo.exercises.length)return;[wo.exercises[i],wo.exercises[j]]=[wo.exercises[j],wo.exercises[i]];renderProgram()};
+  view.querySelectorAll('[data-mvup]').forEach(b=>b.onclick=()=>{const[w,e]=b.dataset.mvup.split('|');mv(w,e,-1)});
+  view.querySelectorAll('[data-mvdn]').forEach(b=>b.onclick=()=>{const[w,e]=b.dataset.mvdn.split('|');mv(w,e,1)});
+}
+function harvest(){ /* read edits from DOM into state */
+  view.querySelectorAll('[data-wname]').forEach(i=>{const wo=program.find(w=>w.id===i.dataset.wname);if(wo)wo.name=i.value.trim()||wo.name});
+  view.querySelectorAll('.exedit').forEach(box=>{
+    const id=box.dataset.exid;
+    for(const wo of program){const ex=wo.exercises.find(e=>e.id===id);if(ex){
+      box.querySelectorAll('[data-e]').forEach(inp=>{
+        const k=inp.dataset.e;
+        ex[k]=k==='name'?(inp.value.trim()||ex.name):+inp.value;
+      });
+      if(ex.repMax<ex.repMin)ex.repMax=ex.repMin;
+      if(ex.rirMax<ex.rirMin)ex.rirMax=ex.rirMin;
+    }}
+  });
+}
+
+/* ---- DATA ---- */
+function renderData(){
+  const recent=[...history].reverse().slice(0,12);
+  view.innerHTML=`
+  <div class="card">
+    <h3>☁️ Nuvem — sincronizar entre aparelhos</h3>
+    <p class="note" style="margin:8px 0 12px">Guarda seus dados num <b>Gist secreto</b> da sua conta GitHub. Ao salvar uma sessão → envia; ao abrir a página em qualquer aparelho → baixa a versão mais recente. Configure o mesmo token no iPhone e no Mac e os dados ficam idênticos nos dois.</p>
+    <details ${ghToken?'':'open'}>
+      <summary>${ghToken?'Token configurado — alterar':'Configurar token do GitHub'}</summary>
+      <p class="note" style="margin:8px 0 10px">Crie em <b>github.com/settings/tokens</b> → "Generate new token (classic)" → marque só o escopo <span class="tag">gist</span> → sem expiração (ou longa). Cole abaixo:</p>
+      <input type="text" id="ghtok" placeholder="ghp_..." value="${esc(ghToken||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
+      <button class="btn ghost" id="ghsave" style="margin-top:10px">Salvar token e ativar</button>
+    </details>
+    ${ghToken?`<button class="btn ghost" id="ghsync" style="margin-top:10px">Sincronizar agora</button>`:''}
+    ${syncState?`<p class="note" style="margin-top:10px;font-family:var(--mono);font-size:12px">${esc(syncState)}</p>`:''}
+    ${gistId?`<p class="note" style="margin-top:6px;font-size:11px;color:var(--faint)">Gist: <span class="tag">${esc(gistId)}</span></p>`:''}
+  </div>
+  <div class="card">
+    <h3>Exportar / Importar</h3>
+    <p class="note" style="margin:8px 0 12px">CSV pronto para o Excel brasileiro (separador <span class="tag">;</span> e vírgula decimal). O import aceita o mesmo formato de volta e mescla por data + treino.</p>
+    <div class="row2">
+      <button class="btn ghost" id="expcsv">⬇ Exportar CSV</button>
+      <button class="btn ghost" id="impcsv">⬆ Importar CSV</button>
+    </div>
+    <div class="row2" style="margin-top:10px">
+      <button class="btn ghost" id="expjson">Backup completo</button>
+      <button class="btn ghost" id="impjson">Restaurar backup</button>
+    </div>
+    <input type="file" id="fcsv" accept=".csv,text/csv" hidden>
+    <input type="file" id="fjson" accept=".json,application/json" hidden>
+  </div>
+  <div class="card">
+    <h3>Como o algoritmo decide</h3>
+    <details><summary>Dupla Progressão Autorregulada</summary>
+      <p class="note">Cada exercício tem uma <b>faixa de reps</b> e um <b>RIR alvo</b>. Após cada sessão registrada:</p>
+      <p class="note" style="margin-top:6px">
+      🟢 <b>SOBE CARGA</b> — todas as séries no topo da faixa com RIR ≥ alvo → soma o incremento.<br>
+      🟡 <b>MANTÉM</b> — dentro da faixa → mesma carga, busque +1 rep por série.<br>
+      🔴 <b>SEGURA/REDUZ</b> — série abaixo da faixa (com RIR 0 → recua um incremento).<br>
+      🟣 <b>ESTAGNOU</b> — 3+ sessões sem progresso na mesma carga → microdeload de ~10% ou troca de exercício.</p>
+      <p class="note" style="margin-top:6px">Método do <i>Muscle &amp; Strength Pyramid</i> (Helms). Em dias ruins, confie no RIR: menos reps com o mesmo esforço ainda é estímulo válido.</p>
+    </details>
+  </div>
+  <div class="card">
+    <h3>Histórico recente</h3>
+    ${recent.length?recent.map(s=>`<div class="hist">
+      <div class="d">${new Date(s.date).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})} ${new Date(s.date).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>
+      <div class="t">${esc(s.workoutName)}</div>
+      <div class="s">${s.entries.map(e=>{const best=e.sets.filter(x=>x.r!=null);const w=Math.max(...best.map(x=>+x.w||0));return `${esc(e.exName.split('(')[0].trim())} — ${fmt(w)}kg × ${best.map(x=>x.r).join('/')}`}).join('<br>')}</div>
+    </div>`).join(''):'<div class="empty">Nenhuma sessão registrada ainda.</div>'}
+    ${history.length?`<button class="btn danger" id="clearh" style="margin-top:12px">Apagar todo o histórico</button>`:''}
+  </div>`;
+  document.getElementById('expcsv').onclick=exportCSV;
+  const ghs=document.getElementById('ghsave');
+  if(ghs)ghs.onclick=async()=>{
+    ghToken=document.getElementById('ghtok').value.trim();
+    await sSet(K_GH,ghToken);
+    if(!ghToken){toast('Token removido');renderData();return}
+    toast('Conectando…');
+    if(gistId)await cloudPull();
+    if(!updatedAt)updatedAt=Date.now(),await sSet(K_UPD,updatedAt);
+    await cloudPush();
+    renderData();
+  };
+  const ghy=document.getElementById('ghsync');
+  if(ghy)ghy.onclick=async()=>{
+    toast('Sincronizando…');
+    await cloudPull();
+    await cloudPush();
+    renderData();
+  };
+  document.getElementById('expjson').onclick=exportJSON;
+  document.getElementById('impcsv').onclick=()=>document.getElementById('fcsv').click();
+  document.getElementById('impjson').onclick=()=>document.getElementById('fjson').click();
+  document.getElementById('fcsv').onchange=importCSV;
+  document.getElementById('fjson').onchange=importJSON;
+  const ch=document.getElementById('clearh');
+  if(ch)ch.onclick=async()=>{if(confirm('Apagar TODO o histórico? Exporte antes se quiser guardar.')){history=[];await saveHistory();await touchAndPush();render();toast('Histórico apagado')}};
+}
+
+/* ============ CSV (pt-BR Excel) ============ */
+function exportCSV(){
+  let rows=['sep=;','Data;Hora;Treino;Exercício;Série;Carga (kg);Reps;RIR'];
+  for(const s of history){
+    const d=new Date(s.date);
+    const ds=d.toLocaleDateString('pt-BR'),ts=d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    for(const e of s.entries)e.sets.forEach((st,i)=>{
+      if(st.r==null&&st.w==null)return;
+      rows.push([ds,ts,s.workoutName,e.exName,i+1,st.w!=null?String(st.w).replace('.',','):'',st.r??'',st.rir??''].map(csvq).join(';'));
+    });
+  }
+  download('historico-treinos.csv','\uFEFF'+rows.join('\r\n'),'text/csv;charset=utf-8');
+  toast('✓ CSV exportado');
+}
+const csvq=v=>{v=String(v);return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+function parseCSVLine(line){
+  const out=[];let cur='',q=false;
+  for(let i=0;i<line.length;i++){const c=line[i];
+    if(q){if(c==='"'){if(line[i+1]==='"'){cur+='"';i++}else q=false}else cur+=c}
+    else if(c==='"')q=true;
+    else if(c===';'){out.push(cur);cur=''}
+    else cur+=c;
+  }
+  out.push(cur);return out;
+}
+async function importCSV(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const text=(await f.text()).replace(/^\uFEFF/,'');
+  const lines=text.split(/\r?\n/).filter(l=>l.trim()&&!/^sep=/.test(l)&&!/^Data;/.test(l));
+  const sessions={};let n=0;
+  for(const line of lines){
+    const [ds,ts,wn,en,si,w,r,rir]=parseCSVLine(line);
+    if(!ds||!en)continue;
+    const [dd,mm,yy]=ds.split('/');
+    const iso=new Date(`${yy}-${mm}-${dd}T${(ts||'12:00')}:00`).toISOString();
+    const key=ds+'|'+wn;
+    if(!sessions[key]){
+      const wo=program.find(x=>x.name===wn);
+      sessions[key]={id:uid(),date:iso,workoutId:wo?wo.id:'imported',workoutName:wn,entries:[]};
+    }
+    const sess=sessions[key];
+    let entry=sess.entries.find(e=>e.exName===en);
+    if(!entry){
+      let exId='imp_'+en;
+      for(const wo of program){const m=wo.exercises.find(e=>e.name===en);if(m){exId=m.id;break}}
+      entry={exId,exName:en,sets:[]};sess.entries.push(entry);
+    }
+    entry.sets[(+si||entry.sets.length+1)-1]={w:w?+String(w).replace(',','.'):null,r:r?+r:null,rir:rir!==''?+rir:null};
+    n++;
+  }
+  for(const key in sessions){
+    const s=sessions[key];
+    history=history.filter(h=>!(new Date(h.date).toLocaleDateString('pt-BR')+'|'+h.workoutName===key));
+    history.push(s);
+  }
+  history.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  await saveHistory();await touchAndPush();ev.target.value='';
+  render();toast(`✓ ${n} séries importadas`);
+}
+
+/* ============ JSON backup ============ */
+function exportJSON(){
+  download('backup-progressao.json',JSON.stringify({program,history,exported:new Date().toISOString()},null,1),'application/json');
+  toast('✓ Backup exportado');
+}
+async function importJSON(ev){
+  const f=ev.target.files[0];if(!f)return;
+  try{
+    const data=JSON.parse(await f.text());
+    if(!Array.isArray(data.program)||!Array.isArray(data.history))throw 0;
+    program=data.program;history=data.history;
+    await saveProgram();await saveHistory();await touchAndPush();
+    selWorkout=program[0]?.id;ev.target.value='';
+    render();toast('✓ Backup restaurado');
+  }catch(e){toast('Arquivo inválido')}
+}
+function download(name,content,type){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type}));
+  a.download=name;a.click();URL.revokeObjectURL(a.href);
+}
+
+/* ============ AI analysis (Claude) ============ */
+let lastAI=null;
+function renderAI(){
+  view.innerHTML=`
+  <div class="card">
+    <h3>Análise inteligente</h3>
+    <p class="note" style="margin:8px 0 12px">Envia um resumo do seu histórico para o <b>Gemini</b> e devolve uma leitura do progresso: estagnações, padrão de RIR, fadiga em déficit e ações concretas. Seus dados continuam salvos <b>apenas nesta página</b> — o modelo lê um recorte a cada análise e não guarda nada.</p>
+    <button class="btn" id="aigo">Analisar meu progresso</button>
+    <p class="note" style="margin-top:10px;font-size:12px;color:var(--faint)">Funciona em qualquer navegador (inclusive no arquivo local) — basta configurar a chave gratuita do Google AI Studio abaixo, uma única vez.</p>
+  </div>
+  <div class="card">
+    <h3>Pergunta livre</h3>
+    <p class="note" style="margin:8px 0 10px">Pergunte algo sobre seu treino — a resposta considera seu programa e histórico atuais.</p>
+    <textarea id="aiq" placeholder="Ex.: devo antecipar o deload para a semana da prova?"></textarea>
+    <button class="btn ghost" id="aiask" style="margin-top:10px">Perguntar</button>
+  </div>
+  <div class="card">
+    <details ${apiKey?'':'open'}>
+      <summary>Chave do Gemini (Google AI Studio)</summary>
+      <p class="note" style="margin:8px 0 10px">Crie uma chave gratuita em <b>aistudio.google.com</b> → "Get API key", cole aqui e salve. O free tier cobre seu volume de uso com folga, e a análise funciona em qualquer navegador, inclusive no arquivo local. A chave fica guardada só no armazenamento desta página.</p>
+      <input type="text" id="aikey" placeholder="AIza..." value="${esc(apiKey||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
+      <div class="fld" style="margin-top:10px"><label>Modelo</label><input type="text" id="aimodel" value="${esc(aiModel)}" style="text-align:left;font-size:13px;padding:10px"></div>
+      <div class="row2" style="margin-top:10px">
+        <button class="btn ghost" id="aikeysave">Salvar</button>
+        <button class="btn danger" id="aikeyclear">Remover</button>
+      </div>
+    </details>
+  </div>
+  <div id="aires">${lastAI?`<div class="card"><h3>Última análise</h3><div class="ai-out">${lastAI}</div></div>`:''}</div>`;
+  document.getElementById('aigo').onclick=()=>runAI(null);
+  document.getElementById('aiask').onclick=()=>{const q=document.getElementById('aiq').value.trim();if(!q){toast('Escreva a pergunta primeiro');return}runAI(q)};
+  document.getElementById('aikeysave').onclick=async()=>{apiKey=document.getElementById('aikey').value.trim();aiModel=document.getElementById('aimodel').value.trim()||'gemini-2.5-flash';await sSet(K_KEY,apiKey);await sSet(K_MODEL,aiModel);toast(apiKey?'✓ Configuração salva':'Chave vazia')};
+  document.getElementById('aikeyclear').onclick=async()=>{apiKey='';await sSet(K_KEY,'');renderAI();toast('Chave removida')};
+}
+function buildContext(){
+  const lines=[];
+  lines.push('Perfil do atleta: homem, 1,86m, ~86kg, ~21% BF, intermediário (1+ ano), natural, recomposição em déficit leve (~2500 kcal, 180g proteína/dia), trabalho sedentário. Objetivo: V-taper (latíssimo + deltoide lateral prioritários; perna em manutenção deliberada). Programa Upper/Lower 3x/semana com dupla progressão autorregulada (faixa de reps + RIR alvo; topo da faixa em todas as séries → sobe carga).');
+  for(const wo of program){
+    lines.push('\nTreino '+wo.name+':');
+    for(const ex of wo.exercises){
+      const prev=lastEntries(ex.id,8).reverse();
+      const hist=prev.map(p=>{
+        const w=Math.max(...p.sets.map(s=>+s.w||0));
+        const reps=p.sets.filter(s=>s.r!=null).map(s=>s.r).join('/');
+        const rirs=p.sets.filter(s=>s.rir!=null).map(s=>s.rir).join('/');
+        return new Date(p.date).toLocaleDateString('pt-BR').slice(0,5)+': '+fmt(w)+'kg×'+reps+' (RIR '+(rirs||'?')+')';
+      }).join(' | ');
+      lines.push('- '+ex.name+' [alvo '+ex.sets+'×'+ex.repMin+'-'+ex.repMax+' RIR '+ex.rirMin+'-'+ex.rirMax+']: '+(hist||'sem registros ainda'));
+    }
+  }
+  const dates=[...new Set(history.map(h=>new Date(h.date).toLocaleDateString('pt-BR')))];
+  lines.push('\nTotal de sessões registradas: '+history.length+(dates.length?' | Últimas datas: '+dates.slice(-12).join(', '):''));
+  return lines.join('\n');
+}
+async function runAI(question){
+  const target=document.getElementById('aires');
+  target.innerHTML='<div class="card"><div class="note"><span class="spin"></span>Analisando seu histórico…</div></div>';
+  const sys='Você é um coach de musculação baseado em evidências (Helms, Israetel, Schoenfeld). Responda em português brasileiro, direto e prático, em no máximo ~300 palavras. Aponte estagnações, padrões de RIR/fadiga e ações concretas com números. Use **negrito** e listas curtas quando ajudar. Não repita os dados de volta; interprete-os.';
+  const user=buildContext()+'\n\n'+(question?('Pergunta do atleta: '+question):'Faça uma análise do progresso: o que evolui, o que estagnou, padrão de RIR e risco de fadiga em déficit, e 2-3 ações concretas para as próximas 2 semanas.');
+  if(!apiKey){
+    target.innerHTML='<div class="card"><div class="note">Configure primeiro a <b>chave do Gemini</b> na seção abaixo (aistudio.google.com → Get API key, gratuita). Depois é só clicar de novo.</div></div>';
+    return;
+  }
+  try{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(aiModel)+':generateContent?key='+encodeURIComponent(apiKey),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        system_instruction:{parts:[{text:sys}]},
+        contents:[{role:'user',parts:[{text:user}]}],
+        generationConfig:{maxOutputTokens:8192,temperature:0.6}
+      })
+    });
+    if(!r.ok){
+      let detail='';try{const eb=await r.json();detail=eb?.error?.message||''}catch(_){}
+      throw new Error('HTTP '+r.status+(detail?' — '+detail.slice(0,180):''));
+    }
+    const data=await r.json();
+    const text=(data.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('\n').trim();
+    if(!text)throw new Error(data.candidates?.[0]?.finishReason==='SAFETY'?'resposta bloqueada por filtro de segurança':'resposta vazia do modelo');
+    lastAI=mdToHtml(text);
+    target.innerHTML='<div class="card"><h3>'+(question?'Resposta':'Análise do progresso')+'</h3><div class="ai-out">'+lastAI+'</div></div>';
+  }catch(e){
+    const diag=e&&e.message?esc(e.message):'erro de rede';
+    target.innerHTML='<div class="card"><div class="note"><b>Falha na chamada:</b> <span class="tag">'+diag+'</span><br><br>'
+      +'Confira: (1) a chave está correta e ativa no aistudio.google.com; (2) o nome do modelo existe — tente <span class="tag">gemini-2.5-flash</span> ou <span class="tag">gemini-2.0-flash</span>; (3) o limite do free tier não foi atingido (renova diariamente).'
+      +'</div></div>';
+  }
+}
+function mdToHtml(md){
+  const e=esc(md);
+  return e.split(/\n{2,}/).map(b=>{
+    const lines=b.split('\n').filter(l=>l.trim()!=='');
+    if(lines.length&&lines.every(l=>/^[-*•] /.test(l.trim())))return '<ul>'+lines.map(l=>'<li>'+l.trim().replace(/^[-*•] /,'')+'</li>').join('')+'</ul>';
+    if(/^#{1,4} /.test(lines[0]||''))return '<h4>'+lines[0].replace(/^#+ /,'')+'</h4>'+(lines.length>1?'<p>'+lines.slice(1).join('<br>')+'</p>':'');
+    return '<p>'+lines.join('<br>')+'</p>';
+  }).join('').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<i>$2</i>');
+}
+
+/* ============ util ============ */
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._to);t._to=setTimeout(()=>t.classList.remove('show'),2600)}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(tab==='program')harvest();tab=b.dataset.tab;render()});
+boot();
+</script>
+</body>
+</html>
