@@ -106,6 +106,32 @@ textarea#aiq{width:100%;padding:11px;background:var(--bg);border:1px solid var(-
 textarea#aiq:focus{outline:none;border-color:var(--accent)}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--faint);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:8px}
 @keyframes sp{to{transform:rotate(360deg)}}
+/* diet */
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.stat{background:var(--surface2);border-radius:10px;padding:11px 12px}
+.stat .v{font-family:var(--mono);font-size:19px;font-weight:700;letter-spacing:-.01em}
+.stat .l{font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.stat .v.up{color:var(--up)}.stat .v.down{color:var(--hold)}.stat .v.acc{color:var(--accent)}
+#dchart{width:100%;height:220px;display:block;margin-top:10px}
+.seg{display:flex;gap:6px;margin-top:10px}
+.seg button{flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font:700 12px inherit;cursor:pointer}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:#131313}
+.modegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.modegrid button{padding:11px 6px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font:700 13px inherit;cursor:pointer}
+.modegrid button.on{background:var(--accent);border-color:var(--accent);color:#131313}
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dgrid.g3{grid-template-columns:1fr 1fr 1fr}
+.dfld label{display:block;font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.dfld input{width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 16px var(--mono);text-align:center}
+.dfld input:focus{outline:none;border-color:var(--accent)}
+.chkrow{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted)}
+.chkrow input{width:18px;height:18px;accent-color:var(--accent)}
+.dhist{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:9px 2px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12.5px}
+.dhist:last-child{border:none}
+.dhist .dd{color:var(--accent)}
+.dhist .del{color:var(--hold);background:none;border:none;font-size:15px;cursor:pointer;padding:2px 6px}
+.coach{margin-top:12px;padding:12px;border-radius:10px;background:var(--surface2);border-left:5px solid var(--accent);font-size:13.5px;line-height:1.55}
+.coach b{font-family:var(--mono)}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .empty{text-align:center;color:var(--faint);padding:30px 10px;font-size:14px}
@@ -126,6 +152,7 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
 
 <nav>
   <button data-tab="train" class="active"><span class="ic">🏋️</span>Treinar</button>
+  <button data-tab="diet"><span class="ic">⚖️</span>Dieta</button>
   <button data-tab="program"><span class="ic">📋</span>Programa</button>
   <button data-tab="ai"><span class="ic">🧠</span>Análise</button>
   <button data-tab="data"><span class="ic">📤</span>Dados</button>
@@ -134,8 +161,9 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
 
 <script>
 /* ============ state & storage ============ */
-const K_PROG='ul_program_v1', K_HIST='ul_history_v1', K_KEY='ul_apikey_v1', K_MODEL='ul_aimodel_v1', K_GH='ul_ghtoken_v1', K_GIST='ul_gist_v1', K_UPD='ul_updated_v1';
+const K_PROG='ul_program_v1', K_HIST='ul_history_v1', K_KEY='ul_apikey_v1', K_MODEL='ul_aimodel_v1', K_GH='ul_ghtoken_v1', K_GIST='ul_gist_v1', K_UPD='ul_updated_v1', K_DIET='ul_diet_v1';
 let program=[], history=[], tab='train', selWorkout=null, memOnly=false, apiKey='', aiModel='gemini-2.5-flash', ghToken='', gistId='', updatedAt=0, syncState='';
+let diet={entries:{},settings:{mode:'deficit',rate:0.4,protTarget:180,tdee0:2820}}, dietRange=30;
 
 const uid=()=>Math.random().toString(36).slice(2,9);
 
@@ -187,6 +215,8 @@ async function boot(){
   ghToken=await sGet(K_GH)||'';
   gistId=await sGet(K_GIST)||'';
   updatedAt=await sGet(K_UPD)||0;
+  const dd=await sGet(K_DIET);
+  if(dd){diet.entries=dd.entries||{};diet.settings=Object.assign(diet.settings,dd.settings||{})}
   if(ghToken&&gistId)await cloudPull();
   if(!program.length){program=defaultProgram();await saveProgram()}
   selWorkout=program[0]?.id;
@@ -217,8 +247,9 @@ async function cloudPull(){
     if((data.updatedAt||0)>(updatedAt||0)){
       if(Array.isArray(data.program))program=data.program;
       if(Array.isArray(data.history))history=data.history;
+      if(data.diet&&data.diet.entries){diet.entries=data.diet.entries;diet.settings=Object.assign(diet.settings,data.diet.settings||{})}
       updatedAt=data.updatedAt||Date.now();
-      await sSet(K_PROG,program);await sSet(K_HIST,history);await sSet(K_UPD,updatedAt);
+      await sSet(K_PROG,program);await sSet(K_HIST,history);await sSet(K_DIET,diet);await sSet(K_UPD,updatedAt);
       syncState='☁️ Baixado da nuvem — '+new Date(updatedAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
     }else{
       syncState='☁️ Local já está atualizado';
@@ -229,7 +260,7 @@ async function cloudPush(){
   if(!ghToken)return;
   try{
     const payload={description:'Progressão de treino — dados (auto-sync)',public:false,files:{}};
-    payload.files[GIST_FILE]={content:JSON.stringify({program,history,updatedAt})};
+    payload.files[GIST_FILE]={content:JSON.stringify({program,history,diet,updatedAt})};
     let r;
     if(gistId){
       r=await fetch('https://api.github.com/gists/'+gistId,{method:'PATCH',headers:ghHeaders(),body:JSON.stringify(payload)});
@@ -301,6 +332,7 @@ function render(){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   weekbar();
   if(tab==='train')renderTrain();
+  else if(tab==='diet')renderDiet();
   else if(tab==='program')renderProgram();
   else if(tab==='ai')renderAI();
   else renderData();
@@ -317,27 +349,43 @@ function renderTrain(){
   if(!program.length){view.innerHTML='<div class="empty">Nenhum treino no programa. Crie um na aba Programa.</div>';return}
   if(!program.find(w=>w.id===selWorkout))selWorkout=program[0].id;
   const wo=program.find(w=>w.id===selWorkout);
-  let h=`<div class="chips">${program.map(w=>`<button class="chip ${w.id===selWorkout?'sel':''}" data-wo="${w.id}">${esc(w.name)}</button>`).join('')}</div>`;
+  const dlRef=diet.settings.lastDeload||(history.length?history[0].date.slice(0,10):null);
+  const dlWks=dlRef?Math.floor((Date.now()-new Date(dlRef).getTime())/6048e5):0;
+  let bn='';
+  if(dlRef&&dlWks>=6)bn=`<div class="decide stall" style="margin-bottom:14px"><b>DELOAD SUGERIDO</b><span style="font-size:12.5px;color:var(--muted)">${dlWks} semanas sem deload — faça uma semana com metade das séries e cargas ~15% menores. <button class="mini up2" id="deloaddone" style="padding:0 4px;text-decoration:underline">marcar como feito</button></span></div>`;
+  let h=bn+`<div class="chips">${program.map(w=>`<button class="chip ${w.id===selWorkout?'sel':''}" data-wo="${w.id}">${esc(w.name)}</button>`).join('')}</div>`;
   h+=wo.exercises.map(ex=>{
     const sg=suggest(ex);
-    const pre=sg.w!=null?sg.w:'';
+    const prev=lastEntries(ex.id,1)[0];
+    const lastSets=prev?prev.sets:[];
     return `<div class="card" data-ex="${ex.id}">
       <h3>${esc(ex.name)}</h3>
       <div class="sub">${ex.sets} × ${ex.repMin}–${ex.repMax} reps · RIR ${ex.rirMin}${ex.rirMax!==ex.rirMin?'–'+ex.rirMax:''} · +${fmt(ex.inc)} kg</div>
       <div class="decide ${sg.type}"><b>${sg.label}${sg.w!=null?' · '+fmt(sg.w)+' kg':''}</b></div>
       <div class="note" style="margin:-4px 0 10px;font-size:12.5px">${sg.msg}</div>
       <div class="sethead"><span>#</span><span>Carga kg</span><span>Reps</span><span>RIR</span></div>
-      ${Array.from({length:ex.sets},(_,i)=>`
+      ${Array.from({length:ex.sets},(_,i)=>{
+        const ls=lastSets[i];
+        let wv=sg.w!=null?sg.w:'';
+        if(ls&&ls.w!=null&&ls.w!==''){
+          if(sg.type==='up'&&ex.inc>0)wv=round25(+ls.w+ex.inc);
+          else if(sg.type==='stall'||sg.type==='hold')wv=sg.w;
+          else wv=+ls.w;
+        }
+        const rp=(sg.type==='keep'&&ls&&ls.r!=null)?Math.min(ex.repMax,+ls.r+1):null;
+        return `
         <div class="setrow"><span class="n">${i+1}</span>
-          <input type="number" inputmode="decimal" step="0.25" placeholder="${pre!==''?fmt(pre):'—'}" value="${pre!==''?pre:''}" data-f="w" data-i="${i}">
-          <input type="number" inputmode="numeric" placeholder="${ex.repMin}–${ex.repMax}" data-f="r" data-i="${i}">
+          <input type="number" inputmode="decimal" step="0.25" placeholder="${wv!==''?fmt(wv):'—'}" value="${wv!==''?wv:''}" data-f="w" data-i="${i}">
+          <input type="number" inputmode="numeric" placeholder="${rp!=null?'alvo '+rp:ex.repMin+'–'+ex.repMax}" data-f="r" data-i="${i}">
           <input type="number" inputmode="numeric" placeholder="${ex.rirMin}" data-f="rir" data-i="${i}">
-        </div>`).join('')}
+        </div>`}).join('')}
     </div>`;
   }).join('');
   h+=`<button class="btn" id="saveSession">Salvar sessão — ${esc(wo.name)}</button>`;
   view.innerHTML=h;
   view.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{selWorkout=c.dataset.wo;render()});
+  const dl=document.getElementById('deloaddone');
+  if(dl)dl.onclick=async()=>{diet.settings.lastDeload=todayISO();await saveDiet();await touchAndPush();toast('✓ Deload registrado');render()};
   view.querySelectorAll('.setrow input').forEach(i=>i.addEventListener('input',()=>i.classList.toggle('done',i.value!=='')));
   document.getElementById('saveSession').onclick=saveSession;
 }
@@ -576,7 +624,7 @@ async function importCSV(ev){
 
 /* ============ JSON backup ============ */
 function exportJSON(){
-  download('backup-progressao.json',JSON.stringify({program,history,exported:new Date().toISOString()},null,1),'application/json');
+  download('backup-progressao.json',JSON.stringify({program,history,diet,exported:new Date().toISOString()},null,1),'application/json');
   toast('✓ Backup exportado');
 }
 async function importJSON(ev){
@@ -585,6 +633,7 @@ async function importJSON(ev){
     const data=JSON.parse(await f.text());
     if(!Array.isArray(data.program)||!Array.isArray(data.history))throw 0;
     program=data.program;history=data.history;
+    if(data.diet&&data.diet.entries){diet.entries=data.diet.entries;diet.settings=Object.assign(diet.settings,data.diet.settings||{});await saveDiet()}
     await saveProgram();await saveHistory();await touchAndPush();
     selWorkout=program[0]?.id;ev.target.value='';
     render();toast('✓ Backup restaurado');
@@ -646,6 +695,14 @@ function buildContext(){
       lines.push('- '+ex.name+' [alvo '+ex.sets+'×'+ex.repMin+'-'+ex.repMax+' RIR '+ex.rirMin+'-'+ex.rirMax+']: '+(hist||'sem registros ainda'));
     }
   }
+  const t=computeTDEE(), wr=weeklyRate(), tk=targetKcal(), tr=computeTrend();
+  const twd=Object.keys(tr).sort();
+  if(twd.length){
+    lines.push('\nDieta: peso tendência atual '+tr[twd[twd.length-1]].toFixed(1)+' kg'
+      +(wr!=null?' | ritmo '+(wr>0?'+':'')+wr.toFixed(2)+' kg/sem':'')
+      +(t?' | TDEE observado ~'+t.tdee+' kcal (média ingerida '+t.avgK+' kcal, janela '+t.days+'d)':' | TDEE ainda em calibração')
+      +' | objetivo: '+diet.settings.mode+' '+diet.settings.rate+' kg/sem, meta '+tk.goal+' kcal, proteína '+diet.settings.protTarget+'g');
+  }
   const dates=[...new Set(history.map(h=>new Date(h.date).toLocaleDateString('pt-BR')))];
   lines.push('\nTotal de sessões registradas: '+history.length+(dates.length?' | Últimas datas: '+dates.slice(-12).join(', '):''));
   return lines.join('\n');
@@ -693,6 +750,229 @@ function mdToHtml(md){
     if(/^#{1,4} /.test(lines[0]||''))return '<h4>'+lines[0].replace(/^#+ /,'')+'</h4>'+(lines.length>1?'<p>'+lines.slice(1).join('<br>')+'</p>':'');
     return '<p>'+lines.join('<br>')+'</p>';
   }).join('').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<i>$2</i>');
+}
+
+/* ============ diet / adaptive TDEE (MacroFactor-style) ============ */
+const KCAL_PER_KG=7700, EWMA_ALPHA=0.2;
+async function saveDiet(){await sSet(K_DIET,diet)}
+const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+function dietDates(){return Object.keys(diet.entries).sort()}
+function computeTrend(){
+  const wd=dietDates().filter(d=>diet.entries[d].weight!=null&&diet.entries[d].weight!=='');
+  const trend={};
+  if(!wd.length)return trend;
+  let t=+diet.entries[wd[0]].weight;
+  trend[wd[0]]=t;
+  for(let i=1;i<wd.length;i++){
+    const w0=+diet.entries[wd[i-1]].weight, w1=+diet.entries[wd[i]].weight;
+    const gap=Math.max(1,Math.round((new Date(wd[i])-new Date(wd[i-1]))/86400000));
+    for(let g=1;g<=gap;g++){
+      const wi=w0+(w1-w0)*g/gap; /* interpola dias sem pesagem */
+      t=t+EWMA_ALPHA*(wi-t);
+    }
+    trend[wd[i]]=t;
+  }
+  return trend;
+}
+function olsSlope(pairs){ /* regressão linear simples: [ [dias,y] ] → kg/dia */
+  const n=pairs.length;
+  const mx=pairs.reduce((s,p)=>s+p[0],0)/n, my=pairs.reduce((s,p)=>s+p[1],0)/n;
+  let num=0,den=0;
+  for(const[x,y]of pairs){num+=(x-mx)*(y-my);den+=(x-mx)*(x-mx)}
+  return den?num/den:0;
+}
+function computeTDEE(){
+  const trend=computeTrend();
+  const wd=Object.keys(trend).sort();
+  if(wd.length<4)return null;
+  const end=wd[wd.length-1], endT=new Date(end).getTime();
+  const win=wd.filter(d=>(endT-new Date(d).getTime())/86400000<=27);
+  if(win.length<4)return null;
+  const days=(endT-new Date(win[0]).getTime())/86400000;
+  if(days<7)return null;
+  const kd=dietDates().filter(d=>d>=win[0]&&d<=end&&diet.entries[d].kcal!=null&&diet.entries[d].kcal!==''&&!diet.entries[d].inc);
+  if(kd.length<4)return null;
+  const slope=olsSlope(win.map(d=>[(new Date(d).getTime()-endT)/86400000,trend[d]])); /* kg/dia via regressão */
+  const avgK=kd.reduce((s,d)=>s+ +diet.entries[d].kcal,0)/kd.length;
+  const observed=avgK-slope*KCAL_PER_KG;
+  /* confiança cresce com nº de dias de kcal, nº de pesagens e amplitude da janela */
+  const conf=Math.min(1,kd.length/12)*Math.min(1,win.length/10)*Math.min(1,days/14);
+  const tdee=Math.round(conf*observed+(1-conf)*diet.settings.tdee0);
+  return{tdee,observed:Math.round(observed),conf,avgK:Math.round(avgK),days:Math.round(days),nK:kd.length};
+}
+function weeklyRate(){
+  const trend=computeTrend();
+  const wd=Object.keys(trend).sort();
+  if(wd.length<3)return null;
+  const endT=new Date(wd[wd.length-1]).getTime();
+  const win=wd.filter(d=>(endT-new Date(d).getTime())/86400000<=14);
+  if(win.length<3)return null;
+  if((endT-new Date(win[0]).getTime())/86400000<5)return null;
+  return olsSlope(win.map(d=>[(new Date(d).getTime()-endT)/86400000,trend[d]]))*7;
+}
+function targetKcal(){
+  const t=computeTDEE();
+  const base=t?t.tdee:diet.settings.tdee0;
+  const s=diet.settings;
+  const adj=s.rate*KCAL_PER_KG/7;
+  const raw=Math.round(s.mode==='deficit'?base-adj:(s.mode==='surplus'?base+adj:base));
+  const today=todayISO();
+  if(!s.lastCoach||!s.lastCoach.goal){s.lastCoach={date:today,goal:raw};saveDiet();return{goal:raw,base,observed:!!t,next:7,changed:false}}
+  const daysSince=Math.floor((new Date(today)-new Date(s.lastCoach.date))/86400000);
+  if(daysSince>=7){ /* check-in semanal: ajuste gradual, máx ±200 kcal por vez */
+    const step=Math.max(-200,Math.min(200,raw-s.lastCoach.goal));
+    const goal=s.lastCoach.goal+step;
+    s.lastCoach={date:today,goal};saveDiet();
+    return{goal,base,observed:!!t,next:7,changed:step!==0};
+  }
+  return{goal:s.lastCoach.goal,base,observed:!!t,next:7-daysSince,changed:false};
+}
+function renderDiet(){
+  const t=computeTDEE(), rate=weeklyRate(), tk=targetKcal(), trend=computeTrend();
+  const wd=Object.keys(trend).sort();
+  const curTrend=wd.length?trend[wd[wd.length-1]]:null;
+  const first=wd.length?trend[wd[0]]:null;
+  const s=diet.settings;
+  const today=todayISO(), te=diet.entries[today]||{};
+  const nEntries=dietDates().filter(d=>diet.entries[d].weight!=null).length;
+  const modeLabel={deficit:'Déficit',maint:'Manutenção',surplus:'Superávit'};
+  const rateOk=rate!=null&&curTrend?Math.abs(rate)/curTrend*100:null;
+  view.innerHTML=`
+  <div class="card">
+    <h3>Registro do dia</h3>
+    <div class="dgrid" style="margin-top:10px">
+      <div class="dfld"><label>Data</label><input type="date" id="ddate" value="${today}" max="${today}" style="font-size:14px"></div>
+      <div class="dfld"><label>Peso (kg)</label><input type="number" inputmode="decimal" step="0.05" id="dweight" placeholder="86,0" value="${te.weight??''}"></div>
+    </div>
+    <div class="dgrid" style="margin-top:10px">
+      <div class="dfld"><label>Kcal total (do MyFitnessPal)</label><input type="number" inputmode="numeric" id="dkcal" placeholder="2500" value="${te.kcal??''}"></div>
+      <div class="dfld"><label>Proteína (g) — opcional</label><input type="number" inputmode="numeric" id="dprot" placeholder="${s.protTarget}" value="${te.prot??''}"></div>
+    </div>
+    <label class="chkrow"><input type="checkbox" id="dinc" ${te.inc?'checked':''}> Dia incompleto (registro alimentar não confiável — fica fora do cálculo)</label>
+    <button class="btn" id="dsave" style="margin-top:12px">Salvar dia</button>
+  </div>
+  <div class="card">
+    <h3>Painel</h3>
+    <div class="statgrid">
+      <div class="stat"><div class="v">${curTrend?fmt(curTrend.toFixed(2))+' kg':'—'}</div><div class="l">Peso (tendência)</div></div>
+      <div class="stat"><div class="v ${rate!=null?(rate<0?'down':'up'):''}">${rate!=null?(rate>0?'+':'')+fmt(rate.toFixed(2))+' kg/sem':'—'}</div><div class="l">Ritmo atual</div></div>
+      <div class="stat"><div class="v acc">${t?fmt(t.tdee):'—'}</div><div class="l">TDEE observado</div></div>
+      <div class="stat"><div class="v">${fmt(tk.goal)}</div><div class="l">Meta kcal (${modeLabel[s.mode]})</div></div>
+      <div class="stat"><div class="v">${(curTrend&&first)?((curTrend-first>=0?'+':'')+fmt((curTrend-first).toFixed(1))+' kg'):'—'}</div><div class="l">Desde o início</div></div>
+      <div class="stat"><div class="v">${s.protTarget} g</div><div class="l">Meta proteína</div></div>
+    </div>
+    <div class="coach">${
+      t?`TDEE: <b>~${fmt(t.tdee)} kcal/dia</b> (confiança ${(t.conf*100).toFixed(0)}%${t.conf<1?' — converge com mais registros':''}; média ingerida ${fmt(t.avgK)} kcal em ${t.nK} dias completos, janela ${t.days}d). Meta para ${modeLabel[s.mode].toLowerCase()}${s.mode!=='maint'?' de '+fmt(s.rate)+' kg/sem':''}: <b>${fmt(tk.goal)} kcal/dia</b>${tk.changed?' — ajustada no check-in de hoje':''}. Próximo check-in do coach: <b>${tk.next}d</b>.${rateOk!=null&&rateOk>0.75&&s.mode==='deficit'?' ⚠️ Ritmo acima de 0,75%/sem do peso — risco de perda de massa; reduza o déficit.':''}`
+      :`Calibrando: registre <b>peso diário</b> e <b>kcal</b>. O TDEE aparece com ~4 pesagens em 7+ dias e 4 dias completos de kcal, e ganha confiança até ~2-3 semanas. Meta atual (estimativa inicial de ${fmt(s.tdee0)} kcal): <b>${fmt(tk.goal)} kcal/dia</b>. Registros com peso: ${nEntries}.`
+    }</div>
+  </div>
+  <div class="card">
+    <h3>Evolução do peso</h3>
+    <canvas id="dchart"></canvas>
+    <div class="seg">
+      <button data-r="30" class="${dietRange===30?'on':''}">30d</button>
+      <button data-r="90" class="${dietRange===90?'on':''}">90d</button>
+      <button data-r="0" class="${dietRange===0?'on':''}">Tudo</button>
+    </div>
+    <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Pontos cinza = pesagens · linha laranja = tendência suavizada (o que importa)</p>
+  </div>
+  <div class="card">
+    <h3>Objetivo</h3>
+    <div class="modegrid">
+      <button data-m="deficit" class="${s.mode==='deficit'?'on':''}">Déficit</button>
+      <button data-m="maint" class="${s.mode==='maint'?'on':''}">Manutenção</button>
+      <button data-m="surplus" class="${s.mode==='surplus'?'on':''}">Superávit</button>
+    </div>
+    <div class="dgrid g3">
+      <div class="dfld"><label>Taxa (kg/sem)</label><input type="number" step="0.05" id="drate" value="${s.rate}" ${s.mode==='maint'?'disabled':''}></div>
+      <div class="dfld"><label>Proteína (g)</label><input type="number" id="dptarget" value="${s.protTarget}"></div>
+      <div class="dfld"><label>TDEE inicial</label><input type="number" id="dtdee0" value="${s.tdee0}"></div>
+    </div>
+    <p class="note" style="margin-top:8px;font-size:12px">Referências: recomposição = déficit 0,25-0,5 kg/sem · superávit magro = 0,1-0,25 kg/sem. O TDEE inicial só vale até o algoritmo convergir (~2-3 semanas).</p>
+    <button class="btn ghost" id="dsetsave" style="margin-top:10px">Salvar objetivo</button>
+  </div>
+  <div class="card">
+    <h3>Últimos registros</h3>
+    ${dietDates().slice(-14).reverse().map(d=>{const e=diet.entries[d];return `<div class="dhist"><span class="dd">${d.slice(8,10)}/${d.slice(5,7)}</span><span>${e.weight!=null&&e.weight!==''?fmt(e.weight)+' kg':'—'}${e.inc?' ⚠️':''}</span><span>${e.kcal!=null&&e.kcal!==''?fmt(e.kcal)+' kcal':'—'}</span><button class="del" data-dd="${d}">✕</button></div>`}).join('')||'<div class="empty">Nenhum registro ainda.</div>'}
+    <button class="btn ghost" id="dexp" style="margin-top:12px">⬇ Exportar dieta (CSV / Excel)</button>
+  </div>`;
+  requestAnimationFrame(drawDietChart);
+  document.getElementById('ddate').onchange=ev=>{
+    const e=diet.entries[ev.target.value]||{};
+    document.getElementById('dweight').value=e.weight??'';
+    document.getElementById('dkcal').value=e.kcal??'';
+    document.getElementById('dprot').value=e.prot??'';
+    document.getElementById('dinc').checked=!!e.inc;
+  };
+  document.getElementById('dsave').onclick=async()=>{
+    const d=document.getElementById('ddate').value;
+    if(!d){toast('Escolha a data');return}
+    const w=document.getElementById('dweight').value, k=document.getElementById('dkcal').value, p=document.getElementById('dprot').value, inc=document.getElementById('dinc').checked;
+    if(w===''&&k===''){toast('Preencha peso e/ou kcal');return}
+    if(w!==''){
+      const tr0=computeTrend(), kk=Object.keys(tr0).sort();
+      if(kk.length){
+        const lt=tr0[kk[kk.length-1]];
+        if(Math.abs(+w-lt)>2.5&&!confirm('Peso '+fmt(w)+' kg difere '+fmt(Math.abs(+w-lt).toFixed(1))+' kg da tendência atual ('+fmt(lt.toFixed(1))+' kg). Salvar mesmo assim?'))return;
+      }
+    }
+    diet.entries[d]={weight:w!==''?+w:null,kcal:k!==''?+k:null,prot:p!==''?+p:null,inc};
+    await saveDiet();await touchAndPush();
+    toast('✓ Dia salvo');renderDiet();
+  };
+  view.querySelectorAll('.modegrid button').forEach(b=>b.onclick=async()=>{diet.settings.mode=b.dataset.m;diet.settings.lastCoach=null;await saveDiet();await touchAndPush();renderDiet()});
+  document.getElementById('dsetsave').onclick=async()=>{
+    diet.settings.rate=Math.abs(+document.getElementById('drate').value)||0.4;
+    diet.settings.protTarget=+document.getElementById('dptarget').value||180;
+    diet.settings.tdee0=+document.getElementById('dtdee0').value||2820;
+    diet.settings.lastCoach=null;
+    await saveDiet();await touchAndPush();
+    toast('✓ Objetivo salvo');renderDiet();
+  };
+  view.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{dietRange=+b.dataset.r;renderDiet()});
+  view.querySelectorAll('.dhist .del').forEach(b=>b.onclick=async()=>{
+    if(confirm('Apagar o registro de '+b.dataset.dd+'?')){delete diet.entries[b.dataset.dd];await saveDiet();await touchAndPush();renderDiet()}
+  });
+  document.getElementById('dexp').onclick=()=>{
+    let rows=['sep=;','Data;Peso (kg);Tendência (kg);Kcal;Proteína (g);Incompleto'];
+    const tr=computeTrend();
+    for(const d of dietDates()){
+      const e=diet.entries[d];
+      rows.push([d.split('-').reverse().join('/'),e.weight!=null?String(e.weight).replace('.',','):'',tr[d]!=null?tr[d].toFixed(2).replace('.',','):'',e.kcal??'',e.prot??'',e.inc?'sim':''].join(';'));
+    }
+    download('dieta.csv','\uFEFF'+rows.join('\r\n'),'text/csv;charset=utf-8');
+    toast('✓ CSV exportado');
+  };
+}
+function drawDietChart(){
+  const cv=document.getElementById('dchart');if(!cv)return;
+  const dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=220;
+  cv.width=W*dpr;cv.height=H*dpr;
+  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+  const trend=computeTrend();
+  const all=dietDates().filter(d=>diet.entries[d].weight!=null&&diet.entries[d].weight!=='');
+  ctx.font='11px ui-monospace,monospace';
+  if(all.length<2){ctx.fillStyle='#5c636c';ctx.fillText('Registre pesagens para ver o gráfico',20,110);return}
+  const endT=new Date(all[all.length-1]).getTime();
+  const fromT=dietRange===0?new Date(all[0]).getTime():endT-dietRange*86400000;
+  const ds=all.filter(d=>new Date(d).getTime()>=fromT);
+  if(ds.length<2){ctx.fillStyle='#5c636c';ctx.fillText('Poucos dados no período',20,110);return}
+  let mn=Infinity,mx=-Infinity;
+  ds.forEach(d=>{mn=Math.min(mn,+diet.entries[d].weight,trend[d]);mx=Math.max(mx,+diet.entries[d].weight,trend[d])});
+  const pad=(mx-mn)*0.15||0.5;mn-=pad;mx+=pad;
+  const X=d=>38+((new Date(d).getTime()-fromT)/(endT-fromT||1))*(W-50);
+  const Y=v=>H-22-((v-mn)/(mx-mn))*(H-40);
+  ctx.strokeStyle='#2b3138';ctx.fillStyle='#5c636c';ctx.lineWidth=1;
+  for(let i=0;i<=3;i++){
+    const v=mn+(mx-mn)*i/3, y=Y(v);
+    ctx.beginPath();ctx.moveTo(36,y);ctx.lineTo(W-8,y);ctx.stroke();
+    ctx.fillText(v.toFixed(1),2,y+4);
+  }
+  ctx.fillStyle='#6b7280';
+  ds.forEach(d=>{ctx.beginPath();ctx.arc(X(d),Y(+diet.entries[d].weight),2.6,0,7);ctx.fill()});
+  ctx.strokeStyle='#f5a623';ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.beginPath();
+  ds.forEach((d,i)=>{const x=X(d),y=Y(trend[d]);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+  ctx.stroke();
 }
 
 /* ============ util ============ */
