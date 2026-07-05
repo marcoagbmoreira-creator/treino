@@ -833,6 +833,7 @@ function renderDiet(){
   const curTrend=wd.length?trend[wd[wd.length-1]]:null;
   const first=wd.length?trend[wd[0]]:null;
   const s=diet.settings;
+  const p=s.profile||{};
   const today=todayISO(), te=diet.entries[today]||{};
   const nEntries=dietDates().filter(d=>diet.entries[d].weight!=null).length;
   const modeLabel={deficit:'Déficit',maint:'Manutenção',surplus:'Superávit'};
@@ -889,6 +890,29 @@ function renderDiet(){
       <div class="dfld"><label>TDEE inicial</label><input type="number" id="dtdee0" value="${s.tdee0}"></div>
     </div>
     <p class="note" style="margin-top:8px;font-size:12px">Referências: recomposição = déficit 0,25-0,5 kg/sem · superávit magro = 0,1-0,25 kg/sem. O TDEE inicial só vale até o algoritmo convergir (~2-3 semanas).</p>
+    <details style="margin-top:10px">
+      <summary>Calcular TDEE inicial (perfil + atividade)</summary>
+      <div class="dgrid g3" style="margin-top:10px">
+        <div class="dfld"><label>Idade</label><input type="number" id="cAge" value="${p.age??''}" placeholder="35"></div>
+        <div class="dfld"><label>Altura (cm)</label><input type="number" id="cH" value="${p.h??''}" placeholder="186"></div>
+        <div class="dfld"><label>Peso (kg)</label><input type="number" step="0.1" id="cW" value="${p.w??(curTrend?curTrend.toFixed(1):'')}" placeholder="86"></div>
+      </div>
+      <div class="dgrid" style="margin-top:10px">
+        <div class="dfld"><label>% Gordura (opcional)</label><input type="number" step="0.5" id="cBF" value="${p.bf??''}" placeholder="21"></div>
+        <div class="dfld"><label>Sexo</label><select id="cSex" style="width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 14px inherit"><option value="m" ${p.sex!=='f'?'selected':''}>Masculino</option><option value="f" ${p.sex==='f'?'selected':''}>Feminino</option></select></div>
+      </div>
+      <div class="dfld" style="margin-top:10px"><label>Nível de atividade (trabalho + treino)</label>
+        <select id="cAct" style="width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 13px inherit">
+          <option value="1.2" ${p.act==1.2?'selected':''}>Sedentário — sem treino, trabalho sentado</option>
+          <option value="1.375" ${p.act==1.375?'selected':''}>Leve — treino 1-3x/sem</option>
+          <option value="1.5" ${(!p.act||p.act==1.5)?'selected':''}>Moderado — treino 3-5x/sem, trabalho sentado</option>
+          <option value="1.725" ${p.act==1.725?'selected':''}>Intenso — treino 6-7x/sem</option>
+          <option value="1.9" ${p.act==1.9?'selected':''}>Muito intenso — 2x/dia ou trabalho físico</option>
+        </select>
+      </div>
+      <button class="btn ghost" id="ccalc" style="margin-top:10px">Calcular e aplicar como TDEE inicial</button>
+      <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Com % de gordura preenchido usa Katch-McArdle (massa magra); sem, usa Mifflin-St Jeor. O resultado substitui o campo "TDEE inicial" e zera o check-in do coach.</p>
+    </details>
     <button class="btn ghost" id="dsetsave" style="margin-top:10px">Salvar objetivo</button>
   </div>
   <div class="card">
@@ -930,6 +954,25 @@ function renderDiet(){
     toast('✓ Objetivo salvo');renderDiet();
   };
   view.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{dietRange=+b.dataset.r;renderDiet()});
+  const cc=document.getElementById('ccalc');
+  if(cc)cc.onclick=async()=>{
+    const age=+document.getElementById('cAge').value, hcm=+document.getElementById('cH').value, w=+document.getElementById('cW').value;
+    const bf=document.getElementById('cBF').value, sex=document.getElementById('cSex').value, act=+document.getElementById('cAct').value;
+    if(!age||!hcm||!w){toast('Preencha idade, altura e peso');return}
+    let bmr;
+    if(bf!==''&&+bf>0&&+bf<60){
+      bmr=370+21.6*(w*(1-+bf/100)); /* Katch-McArdle: massa magra */
+    }else{
+      bmr=sex==='f'?10*w+6.25*hcm-5*age-161:10*w+6.25*hcm-5*age+5; /* Mifflin-St Jeor */
+    }
+    const tdee=Math.round(bmr*act);
+    diet.settings.tdee0=tdee;
+    diet.settings.profile={age,h:hcm,w,bf:bf!==''?+bf:null,sex,act};
+    diet.settings.lastCoach=null;
+    await saveDiet();await touchAndPush();
+    toast('✓ TDEE inicial: '+fmt(tdee)+' kcal/dia');
+    renderDiet();
+  };
   view.querySelectorAll('.dhist .del').forEach(b=>b.onclick=async()=>{
     if(confirm('Apagar o registro de '+b.dataset.dd+'?')){delete diet.entries[b.dataset.dd];await saveDiet();await touchAndPush();renderDiet()}
   });
