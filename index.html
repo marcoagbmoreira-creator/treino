@@ -132,6 +132,18 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
 .dhist .del{color:var(--hold);background:none;border:none;font-size:15px;cursor:pointer;padding:2px 6px}
 .coach{margin-top:12px;padding:12px;border-radius:10px;background:var(--surface2);border-left:5px solid var(--accent);font-size:13.5px;line-height:1.55}
 .coach b{font-family:var(--mono)}
+/* PIN lock */
+#lock{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px}
+#lock h2{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.pindots{display:flex;gap:14px}
+.pindots span{width:14px;height:14px;border-radius:50%;border:2px solid var(--faint)}
+.pindots span.f{background:var(--accent);border-color:var(--accent)}
+.pinpad{display:grid;grid-template-columns:repeat(3,72px);gap:12px}
+.pinpad button{height:64px;border-radius:16px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:700 22px var(--mono);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pinpad button:active{background:var(--surface2)}
+.pinpad button.ghostk{background:none;border:none;font-size:14px;color:var(--muted)}
+#lock.err .pindots{animation:shake .3s}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .empty{text-align:center;color:var(--faint);padding:30px 10px;font-size:14px}
@@ -141,6 +153,17 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
 </style>
 </head>
 <body>
+<div id="lock">
+  <div class="eyebrow">Acesso restrito</div>
+  <h2>Digite o PIN</h2>
+  <div class="pindots"><span></span><span></span><span></span><span></span></div>
+  <div class="pinpad">
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+    <button class="ghostk" data-k="del">apagar</button><button data-k="0">0</button><button class="ghostk" style="visibility:hidden">·</button>
+  </div>
+</div>
 <div class="wrap">
   <header>
     <div class="eyebrow">Dupla progressão autorregulada</div>
@@ -1021,8 +1044,32 @@ function drawDietChart(){
 /* ============ util ============ */
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._to);t._to=setTimeout(()=>t.classList.remove('show'),2600)}
+/* ============ PIN lock ============ */
+const PIN_H=2085891405; /* hash do PIN — o código não guarda o PIN em texto */
+function djb2(s){let h=5381;for(let i=0;i<s.length;i++)h=((h*33)^s.charCodeAt(i))>>>0;return h}
+let pinBuf='';
+function pinInit(){
+  let ok=false;try{ok=sessionStorage.getItem('ul_unlocked')==='1'}catch(e){}
+  const L=document.getElementById('lock');
+  if(ok){L.remove();boot();return}
+  L.querySelectorAll('.pinpad button').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.k;if(k==null)return;
+    if(k==='del')pinBuf=pinBuf.slice(0,-1);
+    else if(pinBuf.length<4)pinBuf+=k;
+    L.querySelectorAll('.pindots span').forEach((s,i)=>s.classList.toggle('f',i<pinBuf.length));
+    if(pinBuf.length===4){
+      if(djb2(pinBuf)===PIN_H){
+        try{sessionStorage.setItem('ul_unlocked','1')}catch(e){}
+        L.remove();boot();
+      }else{
+        L.classList.add('err');
+        setTimeout(()=>{L.classList.remove('err');pinBuf='';L.querySelectorAll('.pindots span').forEach(s=>s.classList.remove('f'))},350);
+      }
+    }
+  });
+}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(tab==='program')harvest();tab=b.dataset.tab;render()});
-boot();
+pinInit();
 </script>
 </body>
 </html>
