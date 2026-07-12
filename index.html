@@ -159,6 +159,29 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
 .pinpad button.ghostk{background:none;border:none;font-size:14px;color:var(--muted)}
 #lock.err .pindots{animation:shake .3s}
 @keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+/* dashboard */
+.calhead{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+.calhead .mname{font:700 15px inherit;text-transform:capitalize}
+.calhead button{width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;cursor:pointer}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:10px}
+.cal .dow{font-family:var(--mono);font-size:10px;color:var(--faint);text-align:center;text-transform:uppercase;padding:4px 0}
+.cal .day{aspect-ratio:1;border-radius:10px;background:var(--surface2);border:1.5px solid transparent;display:flex;align-items:center;justify-content:center;font:600 13px var(--mono);color:var(--muted);cursor:pointer;position:relative;-webkit-tap-highlight-color:transparent}
+.cal .day.blank{background:none;cursor:default}
+.cal .day.t{background:#2b2310;border-color:#5c4a15;color:var(--accent)}
+.cal .day .wdot{width:5px;height:5px;border-radius:50%;background:var(--up);position:absolute;bottom:5px;left:50%;transform:translateX(-50%)}
+.cal .day.today{border-color:var(--accent)}
+.cal .day.sel{outline:2px solid var(--accent);outline-offset:1px}
+.cal .day.future{opacity:.35;cursor:default}
+.legend{display:flex;gap:16px;margin-top:10px;font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+.legend .sq{display:inline-block;width:11px;height:11px;border-radius:3px;background:#2b2310;border:1.5px solid #5c4a15;vertical-align:-1px;margin-right:5px}
+.legend .dt{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--up);vertical-align:1px;margin-right:6px}
+.streakbig{display:flex;align-items:baseline;gap:8px}
+.streakbig .n{font:800 34px var(--mono);color:var(--accent)}
+.streakbig .u{font-size:12px;color:var(--muted)}
+#tonchart{width:100%;height:150px;display:block;margin-top:10px}
+.daydetail{margin-top:12px;background:var(--surface2);border-radius:10px;padding:12px;font-size:13.5px}
+.daydetail .dtitle{font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:6px}
+.daydetail .s{font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .empty{text-align:center;color:var(--faint);padding:30px 10px;font-size:14px}
@@ -199,7 +222,8 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
   <button data-rt="skip">✕</button>
 </div>
 <nav>
-  <button data-tab="train" class="active"><span class="ic">🏋️</span>Treinar</button>
+  <button data-tab="home" class="active"><span class="ic">📊</span>Resumo</button>
+  <button data-tab="train"><span class="ic">🏋️</span>Treinar</button>
   <button data-tab="diet"><span class="ic">⚖️</span>Dieta</button>
   <button data-tab="program"><span class="ic">📋</span>Programa</button>
   <button data-tab="ai"><span class="ic">🧠</span>Análise</button>
@@ -209,9 +233,9 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
 
 <script>
 /* ============ state & storage ============ */
-const K_PROG='ul_program_v1', K_HIST='ul_history_v1', K_KEY='ul_apikey_v1', K_MODEL='ul_aimodel_v1', K_GH='ul_ghtoken_v1', K_GIST='ul_gist_v1', K_UPD='ul_updated_v1', K_DIET='ul_diet_v1';
-let program=[], history=[], tab='train', selWorkout=null, memOnly=false, apiKey='', aiModel='gemini-2.5-flash', ghToken='', gistId='', updatedAt=0, syncState='';
-let diet={entries:{},settings:{mode:'deficit',rate:0.4,protTarget:180,tdee0:2820}}, dietRange=30;
+const K_PROG='ul_program_v1', K_HIST='ul_history_v1', K_KEY='ul_apikey_v1', K_MODEL='ul_aimodel_v1', K_GH='ul_ghtoken_v1', K_GIST='ul_gist_v1', K_UPD='ul_updated_v1', K_DIET='ul_diet_v1', K_HEVY='ul_hevykey_v1', K_HSYNC='ul_hevysync_v1';
+let program=[], history=[], tab='home', selWorkout=null, memOnly=false, apiKey='', aiModel='gemini-2.5-flash', ghToken='', gistId='', updatedAt=0, syncState='', hevyKey='', hevyLast='';
+let diet={entries:{},settings:{mode:'deficit',rate:0.4,protTarget:180,tdee0:2820}}, dietRange=30, homeMonth=new Date(), homeSel=null;
 
 const uid=()=>Math.random().toString(36).slice(2,9);
 
@@ -265,6 +289,8 @@ async function boot(){
   updatedAt=await sGet(K_UPD)||0;
   const dd=await sGet(K_DIET);
   if(dd){diet.entries=dd.entries||{};diet.settings=Object.assign(diet.settings,dd.settings||{})}
+  hevyKey=await sGet(K_HEVY)||'';
+  hevyLast=await sGet(K_HSYNC)||'';
   if(ghToken&&gistId)await cloudPull();
   if(!program.length){program=defaultProgram();await saveProgram()}
   /* migração: exercícios sem tempo de descanso ganham um pela faixa de reps */
@@ -273,6 +299,7 @@ async function boot(){
   }
   selWorkout=program[0]?.id;
   render();
+  if(hevyKey)hevySync(false).then(r=>{if(r.n){toast('✓ '+r.n+' treino(s) importados do Hevy');render()}});
   if(memOnly)toast('⚠️ Sem armazenamento — dados só nesta sessão');
 }
 async function saveProgram(){await sSet(K_PROG,program)}
@@ -357,15 +384,15 @@ function suggest(ex){
   const last=prev[0];
   const w=Math.max(...last.sets.map(s=>+s.w||0));
   const valid=last.sets.filter(s=>s.r!=null&&s.r!=='');
-  const topAll=valid.length>0&&valid.every(s=>+s.r>=ex.repMax&&(+s.rir)>=ex.rirMin);
+  const topAll=valid.length>0&&valid.every(s=>+s.r>=ex.repMax&&(s.rir==null||+s.rir>=ex.rirMin));
   const anyBelow=valid.some(s=>+s.r<ex.repMin);
-  const ground=valid.some(s=>+s.r<ex.repMin&&+s.rir===0);
+  const ground=valid.some(s=>+s.r<ex.repMin&&s.rir!=null&&+s.rir===0);
   // stall: 3+ sessions at same top weight without topAll
   let stall=0;
   for(const p of prev){
     const pw=Math.max(...p.sets.map(s=>+s.w||0));
     const pv=p.sets.filter(s=>s.r!=null&&s.r!=='');
-    const pTop=pv.length>0&&pv.every(s=>+s.r>=ex.repMax&&(+s.rir)>=ex.rirMin);
+    const pTop=pv.length>0&&pv.every(s=>+s.r>=ex.repMax&&(s.rir==null||+s.rir>=ex.rirMin));
     if(pw===w&&!pTop)stall++;else break;
   }
   if(topAll&&ex.inc>0)return{type:'up',w:round25(w+ex.inc),label:'SOBE CARGA',msg:`Topo da faixa atingido em todas as séries → ${fmt(w)} + ${fmt(ex.inc)} kg.`};
@@ -383,7 +410,8 @@ const view=document.getElementById('view');
 function render(){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   weekbar();
-  if(tab==='train')renderTrain();
+  if(tab==='home')renderHome();
+  else if(tab==='train')renderTrain();
   else if(tab==='diet')renderDiet();
   else if(tab==='program')renderProgram();
   else if(tab==='ai')renderAI();
@@ -394,6 +422,132 @@ function weekbar(){
   const now=new Date();const monday=new Date(now);monday.setDate(now.getDate()-((now.getDay()+6)%7));monday.setHours(0,0,0,0);
   const count=history.filter(h=>new Date(h.date)>=monday).length;
   for(let i=0;i<3;i++){const s=document.createElement('span');if(i<count)s.className='on';el.appendChild(s)}
+}
+
+/* ---- HOME / DASHBOARD ---- */
+function dISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function sessionsByDay(){const m={};for(const s of history){const k=s.date.slice(0,10);(m[k]=m[k]||[]).push(s)}return m}
+function weightStreak(){
+  let n=0, d=new Date();
+  const has=k=>{const e=diet.entries[k];return e&&e.weight!=null&&e.weight!==''};
+  if(!has(dISO(d)))d.setDate(d.getDate()-1); /* hoje ainda não pesou não quebra a sequência */
+  while(has(dISO(d))){n++;d.setDate(d.getDate()-1)}
+  return n;
+}
+function trainWeekStreak(sbd){
+  /* semanas consecutivas (terminando na atual ou anterior) com 3+ treinos */
+  const mon=d=>{const m=new Date(d);m.setDate(m.getDate()-((m.getDay()+6)%7));m.setHours(0,0,0,0);return m};
+  const cnt=ws=>{const we=new Date(ws.getTime()+6048e5);return history.filter(h=>{const t=new Date(h.date);return t>=ws&&t<we}).length};
+  let w=mon(new Date()), n=0;
+  if(cnt(w)>=3){n++;}
+  w=new Date(w.getTime()-6048e5);
+  while(cnt(w)>=3){n++;w=new Date(w.getTime()-6048e5)}
+  return n;
+}
+function renderHome(){
+  const sbd=sessionsByDay();
+  const now=new Date(), tI=todayISO();
+  const mon=new Date(now);mon.setDate(now.getDate()-((now.getDay()+6)%7));mon.setHours(0,0,0,0);
+  const weekN=history.filter(h=>new Date(h.date)>=mon).length;
+  const y=homeMonth.getFullYear(), mo=homeMonth.getMonth();
+  const mPrefix=y+'-'+String(mo+1).padStart(2,'0');
+  const monthTrains=Object.keys(sbd).filter(k=>k.startsWith(mPrefix)).length;
+  const monthWeighs=dietDates().filter(k=>k.startsWith(mPrefix)&&diet.entries[k].weight!=null&&diet.entries[k].weight!=='').length;
+  const wstreak=weightStreak(), tstreak=trainWeekStreak(sbd);
+  const setsWeek=history.filter(h=>new Date(h.date)>=mon).reduce((s,h)=>s+h.entries.reduce((a,e)=>a+e.sets.filter(x=>x.r!=null).length,0),0);
+  const firstDow=(new Date(y,mo,1).getDay()); /* 0=domingo */
+  const dim=new Date(y,mo+1,0).getDate();
+  const mname=homeMonth.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  let cal='';
+  for(const dw of['D','S','T','Q','Q','S','S'])cal+=`<div class="dow">${dw}</div>`;
+  for(let i=0;i<firstDow;i++)cal+='<div class="day blank"></div>';
+  for(let d=1;d<=dim;d++){
+    const k=mPrefix+'-'+String(d).padStart(2,'0');
+    const trained=!!sbd[k];
+    const weighed=diet.entries[k]&&diet.entries[k].weight!=null&&diet.entries[k].weight!=='';
+    const isToday=k===tI, isFuture=k>tI;
+    cal+=`<div class="day${trained?' t':''}${isToday?' today':''}${k===homeSel?' sel':''}${isFuture?' future':''}" data-day="${k}">${d}${weighed?'<span class="wdot"></span>':''}</div>`;
+  }
+  let detail='';
+  if(homeSel){
+    const ss=sbd[homeSel]||[];
+    const de=diet.entries[homeSel];
+    const dLabel=homeSel.split('-').reverse().join('/');
+    let body='';
+    for(const s of ss){
+      body+=`<div style="margin-bottom:6px"><b>🏋️ ${esc(s.workoutName)}</b><div class="s">${s.entries.map(e=>{const v=e.sets.filter(x=>x.r!=null);const w=Math.max(...v.map(x=>+x.w||0));return esc(e.exName.split('(')[0].trim())+' — '+fmt(w)+'kg × '+v.map(x=>x.r).join('/')}).join('<br>')}</div></div>`;
+    }
+    if(de&&(de.weight!=null||de.kcal!=null)){
+      body+=`<div><b>⚖️ Dieta</b><div class="s">${de.weight!=null&&de.weight!==''?'Peso: '+fmt(de.weight)+' kg':''}${de.kcal!=null&&de.kcal!==''?' · '+fmt(de.kcal)+' kcal':''}${de.prot!=null&&de.prot!==''?' · '+fmt(de.prot)+'g prot':''}${de.inc?' · ⚠️ incompleto':''}</div></div>`;
+    }
+    if(!body)body='<div class="s">Sem registros neste dia.</div>';
+    detail=`<div class="daydetail"><div class="dtitle">${dLabel}</div>${body}</div>`;
+  }
+  view.innerHTML=`
+  <div class="card">
+    <h3>Sequências</h3>
+    <div class="statgrid">
+      <div class="stat"><div class="streakbig"><span class="n">${wstreak}</span><span class="u">dias 🔥</span></div><div class="l">Pesagens seguidas</div></div>
+      <div class="stat"><div class="streakbig"><span class="n">${tstreak}</span><span class="u">semanas 💪</span></div><div class="l">Semanas com 3 treinos</div></div>
+      <div class="stat"><div class="v ${weekN>=3?'up':''}">${weekN}/3</div><div class="l">Treinos esta semana</div></div>
+      <div class="stat"><div class="v">${setsWeek}</div><div class="l">Séries na semana</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="calhead">
+      <button id="calprev">‹</button>
+      <span class="mname">${mname}</span>
+      <button id="calnext">›</button>
+    </div>
+    <div class="cal">${cal}</div>
+    <div class="legend"><span><span class="sq"></span>treino</span><span><span class="dt"></span>pesagem</span><span>toque no dia para detalhes</span></div>
+    ${detail}
+    <div class="statgrid" style="margin-top:12px">
+      <div class="stat"><div class="v acc">${monthTrains}</div><div class="l">Treinos no mês</div></div>
+      <div class="stat"><div class="v">${monthWeighs}/${dim}</div><div class="l">Pesagens no mês</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Tonelagem semanal</h3>
+    <p class="note" style="margin-top:4px;font-size:12px;color:var(--faint)">Volume total levantado (carga × reps) por semana — últimas 8 semanas</p>
+    <canvas id="tonchart"></canvas>
+  </div>`;
+  document.getElementById('calprev').onclick=()=>{homeMonth=new Date(y,mo-1,1);homeSel=null;renderHome()};
+  document.getElementById('calnext').onclick=()=>{homeMonth=new Date(y,mo+1,1);homeSel=null;renderHome()};
+  view.querySelectorAll('.cal .day[data-day]').forEach(el=>{
+    if(el.classList.contains('future'))return;
+    el.onclick=()=>{homeSel=homeSel===el.dataset.day?null:el.dataset.day;renderHome()};
+  });
+  requestAnimationFrame(drawTonnage);
+}
+function drawTonnage(){
+  const cv=document.getElementById('tonchart');if(!cv)return;
+  const dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=150;
+  cv.width=W*dpr;cv.height=H*dpr;
+  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+  ctx.font='10px ui-monospace,monospace';
+  const now=new Date();
+  const mon=new Date(now);mon.setDate(now.getDate()-((now.getDay()+6)%7));mon.setHours(0,0,0,0);
+  const weeks=[];
+  for(let i=7;i>=0;i--){
+    const ws=new Date(mon.getTime()-i*6048e5), we=new Date(ws.getTime()+6048e5);
+    let ton=0;
+    for(const s of history){const t=new Date(s.date);if(t>=ws&&t<we)for(const e of s.entries)for(const st of e.sets)if(st.r!=null&&st.w!=null)ton+=st.w*st.r}
+    weeks.push({label:String(ws.getDate()).padStart(2,'0')+'/'+String(ws.getMonth()+1).padStart(2,'0'),ton});
+  }
+  const mx=Math.max(...weeks.map(w=>w.ton),1);
+  if(mx<=1){ctx.fillStyle='#5c636c';ctx.font='13px sans-serif';ctx.fillText('Registre treinos para ver o volume',20,75);return}
+  const bw=(W-20)/8;
+  weeks.forEach((w,i)=>{
+    const h=(w.ton/mx)*(H-42);
+    const x=10+i*bw+bw*0.15, y=H-24-h;
+    ctx.fillStyle=i===7?'#f5a623':'#6b5316';
+    ctx.beginPath();ctx.roundRect(x,y,bw*0.7,h,4);ctx.fill();
+    ctx.fillStyle='#8b929b';
+    if(w.ton>0){const lbl=w.ton>=1000?(w.ton/1000).toFixed(1)+'t':Math.round(w.ton)+'';ctx.fillText(lbl,x+bw*0.35-ctx.measureText(lbl).width/2,y-5)}
+    ctx.fillStyle='#5c636c';
+    ctx.fillText(w.label,x+bw*0.35-ctx.measureText(w.label).width/2,H-8);
+  });
 }
 
 /* ---- TRAIN ---- */
@@ -556,6 +710,18 @@ function renderData(){
     ${gistId?`<p class="note" style="margin-top:6px;font-size:11px;color:var(--faint)">Gist: <span class="tag">${esc(gistId)}</span></p>`:''}
   </div>
   <div class="card">
+    <h3>🔗 Hevy — treine lá, progrida aqui</h3>
+    <p class="note" style="margin:8px 0 12px">Registre os treinos no app do <b>Hevy</b>; este app importa automaticamente e roda o algoritmo de progressão em cima (a decisão de carga aparece na aba Treinar como sempre). A cada abertura, os treinos novos são puxados sozinhos. Requer <b>Hevy Pro</b> — chave em hevy.com/settings → Developer.</p>
+    <details ${hevyKey?'':'open'}>
+      <summary>${hevyKey?'Chave configurada — alterar':'Configurar chave do Hevy'}</summary>
+      <input type="text" id="hevykey" placeholder="chave da API do Hevy" value="${esc(hevyKey||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono);margin-top:8px">
+      <button class="btn ghost" id="hevysave" style="margin-top:10px">Salvar chave</button>
+    </details>
+    ${hevyKey?`<button class="btn ghost" id="hevyimp" style="margin-top:10px">Importar todo o histórico agora</button>`:''}
+    ${hevyLast?`<p class="note" style="margin-top:8px;font-family:var(--mono);font-size:12px">Última importação: ${new Date(hevyLast).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>`:''}
+    <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Dica: registre o <b>RPE</b> nas séries do Hevy (RIR = 10 − RPE) para o algoritmo decidir com precisão. Sem RPE, ele assume que o RIR alvo foi respeitado. Séries de aquecimento são ignoradas.</p>
+  </div>
+  <div class="card">
     <h3>Exportar / Importar</h3>
     <p class="note" style="margin:8px 0 12px">CSV pronto para o Excel brasileiro (separador <span class="tag">;</span> e vírgula decimal). O import aceita o mesmo formato de volta e mescla por data + treino.</p>
     <div class="row2">
@@ -591,6 +757,25 @@ function renderData(){
     ${history.length?`<button class="btn danger" id="clearh" style="margin-top:12px">Apagar todo o histórico</button>`:''}
   </div>`;
   document.getElementById('expcsv').onclick=exportCSV;
+  const hvs=document.getElementById('hevysave');
+  if(hvs)hvs.onclick=async()=>{
+    hevyKey=document.getElementById('hevykey').value.trim();
+    await sSet(K_HEVY,hevyKey);
+    if(!hevyKey){toast('Chave removida');renderData();return}
+    toast('Testando conexão…');
+    const r=await hevySync(false);
+    if(r.err)toast('⚠️ Falha: '+r.err);
+    else toast(r.n?'✓ Conectado — '+r.n+' treino(s) novos':'✓ Conectado — nada novo');
+    renderData();
+  };
+  const hvi=document.getElementById('hevyimp');
+  if(hvi)hvi.onclick=async()=>{
+    toast('Importando histórico completo…');
+    const r=await hevySync(true);
+    if(r.err)toast('⚠️ Falha ('+r.err+') — '+r.n+' importados antes do erro');
+    else toast('✓ '+r.n+' treino(s) importados');
+    renderData();
+  };
   const ghs=document.getElementById('ghsave');
   if(ghs)ghs.onclick=async()=>{
     ghToken=document.getElementById('ghtok').value.trim();
@@ -1083,6 +1268,72 @@ function drawDietChart(){
   ctx.strokeStyle='#f5a623';ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.beginPath();
   ds.forEach((d,i)=>{const x=X(d),y=Y(trend[d]);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
   ctx.stroke();
+}
+
+/* ============ Hevy sync ============ */
+const normName=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+function matchProgramEx(he){
+  for(const wo of program)for(const ex of wo.exercises)if(ex.hevyId&&ex.hevyId===he.exercise_template_id)return ex;
+  const ht=normName(he.title);
+  if(!ht)return null;
+  let best=null,bestScore=0;
+  for(const wo of program)for(const ex of wo.exercises){
+    const et=normName(ex.name);
+    let score=0;
+    for(const t of et.split(' '))if(t.length>3&&ht.includes(t))score++;
+    for(const t of ht.split(' '))if(t.length>3&&et.includes(t))score++;
+    if(score>bestScore){bestScore=score;best=ex}
+  }
+  if(best&&bestScore>=2){best.hevyId=he.exercise_template_id;return best}
+  return null;
+}
+function convertHevy(w){
+  const entries=[];
+  for(const he of (w.exercises||[])){
+    const sets=(he.sets||[]).filter(s=>s.type!=='warmup').map(s=>({
+      w:s.weight_kg!=null?+s.weight_kg:null,
+      r:s.reps!=null?+s.reps:null,
+      rir:s.rpe!=null?Math.max(0,Math.round(10-s.rpe)):null
+    }));
+    if(!sets.some(s=>s.r!=null))continue;
+    const m=matchProgramEx(he);
+    entries.push({exId:m?m.id:'hevy_'+(he.exercise_template_id||normName(he.title)),exName:m?m.name:(he.title||'Exercício'),sets});
+  }
+  return entries;
+}
+async function hevySync(manual){
+  if(!hevyKey)return{n:0};
+  const known=new Set(history.map(h=>h.hevyId).filter(Boolean));
+  let added=0,page=1;
+  const maxPages=manual?60:3;
+  try{
+    while(page<=maxPages){
+      const r=await fetch('https://api.hevyapp.com/v1/workouts?page='+page+'&pageSize=10',{headers:{'api-key':hevyKey}});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const data=await r.json();
+      const list=data.workouts||[];
+      let newInPage=0;
+      for(const w of list){
+        if(!w.id||known.has(w.id))continue;
+        const entries=convertHevy(w);
+        if(!entries.length)continue;
+        const title=w.title||'Treino Hevy';
+        const wo=program.find(x=>normName(x.name)===normName(title));
+        history.push({id:uid(),hevyId:w.id,date:w.start_time||w.created_at||new Date().toISOString(),workoutId:wo?wo.id:'hevy',workoutName:title,entries});
+        known.add(w.id);added++;newInPage++;
+      }
+      if(list.length<10)break;
+      if(!manual&&newInPage===0)break; /* sync rápido: parou de achar novidade */
+      page++;
+    }
+    if(added){
+      history.sort((a,b)=>new Date(a.date)-new Date(b.date));
+      await saveHistory();await saveProgram();/* persiste os hevyId mapeados */
+      await touchAndPush();
+      hevyLast=new Date().toISOString();await sSet(K_HSYNC,hevyLast);
+    }
+    return{n:added};
+  }catch(e){return{n:added,err:e&&e.message?e.message:'rede/CORS'}}
 }
 
 /* ============ rest timer ============ */
