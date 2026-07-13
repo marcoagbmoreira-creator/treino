@@ -53,20 +53,10 @@ nav button.active{color:var(--accent)}
 
 /* set rows */
 .sethead,.setrow{display:grid;grid-template-columns:30px 1fr 1fr 1fr 44px;gap:8px;align-items:center}
-.setrow.donerow input{border-color:#2f7d4f;background:#141d17}
-.chk{height:44px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--faint);font-size:17px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.chk.on{background:var(--up);border-color:var(--up);color:#0c1510}
-/* rest timer */
-#resttimer{position:fixed;left:10px;right:10px;bottom:calc(74px + env(safe-area-inset-bottom));background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:10px 12px;z-index:60;display:none;align-items:center;gap:10px;box-shadow:0 10px 28px rgba(0,0,0,.45)}
-#resttimer.on{display:flex}
-#resttimer .rt-info{min-width:78px}
-#resttimer .rt-label{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
-#resttimer .rt-time{font:800 26px/1.1 var(--mono)}
-#resttimer.done .rt-time{color:var(--up)}
-#resttimer .rt-bar{flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden}
-#resttimer .rt-fill{height:100%;background:var(--accent);width:100%;transition:width .25s linear}
-#resttimer.done .rt-fill{background:var(--up)}
-#resttimer button{height:40px;min-width:44px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:700 13px var(--mono);cursor:pointer}
+.lastline{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
+.linkrow{display:flex;flex-direction:column;gap:7px;padding:11px 0;border-bottom:1px solid var(--border);font-size:13.5px}
+.linkrow:last-of-type{border:none}
+.linkrow select{width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 13px inherit}
 
 .sethead{font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;padding:0 2px}
 .setrow{margin-bottom:8px}
@@ -211,19 +201,9 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
   <main id="view"><div class="loading">CARREGANDO…</div></main>
 </div>
 
-<div id="resttimer">
-  <div class="rt-info">
-    <div class="rt-label" id="rtlabel">Descanso</div>
-    <div class="rt-time" id="rttime">2:00</div>
-  </div>
-  <div class="rt-bar"><div class="rt-fill" id="rtfill"></div></div>
-  <button data-rt="-15">−15</button>
-  <button data-rt="15">+15</button>
-  <button data-rt="skip">✕</button>
-</div>
 <nav>
   <button data-tab="home" class="active"><span class="ic">📊</span>Resumo</button>
-  <button data-tab="train"><span class="ic">🏋️</span>Treinar</button>
+  <button data-tab="train"><span class="ic">📈</span>Progressão</button>
   <button data-tab="diet"><span class="ic">⚖️</span>Dieta</button>
   <button data-tab="program"><span class="ic">📋</span>Programa</button>
   <button data-tab="ai"><span class="ic">🧠</span>Análise</button>
@@ -378,29 +358,48 @@ function lastEntries(exId,n){
   }
   return out;
 }
+function refAnalysis(sets,ex){
+  const valid=sets.filter(s=>s.r!=null&&s.r!=='');
+  if(!valid.length)return null;
+  /* peso de referência = moda entre as séries válidas (empate → maior); exclui back-offs/drops da decisão */
+  const counts={};
+  for(const s of valid){const k=(s.w!=null&&s.w!=='')?+s.w:0;counts[k]=(counts[k]||0)+1}
+  let ref=0,best=0;
+  for(const k in counts){const c=counts[k];if(c>best||(c===best&&+k>ref)){best=c;ref=+k}}
+  const ev=valid.filter(s=>((s.w!=null&&s.w!=='')?+s.w:0)===ref);
+  const total=ev.reduce((a,s)=>a+ +s.r,0);
+  const rirOk=ev.every(s=>s.rir==null||+s.rir>=ex.rirMin);
+  const topCons=ev.every(s=>+s.r>=ex.repMax)&&rirOk;
+  const topFlex=total>=ev.length*ex.repMax-1&&rirOk;
+  return{
+    ref,total,n:ev.length,
+    top:(diet.settings.progMode==='flexivel')?topFlex:topCons,
+    anyBelow:ev.some(s=>+s.r<ex.repMin),
+    ground:ev.some(s=>+s.r<ex.repMin&&s.rir!=null&&+s.rir===0)
+  };
+}
 function suggest(ex){
-  const prev=lastEntries(ex.id,4);
-  if(!prev.length)return{type:'first',w:null,label:'PRIMEIRA SESSÃO',msg:`Escolha uma carga que dê ${ex.repMin}–${ex.repMax} reps com RIR ${ex.rirMin}${ex.rirMax!==ex.rirMin?'–'+ex.rirMax:''}.`};
-  const last=prev[0];
-  const w=Math.max(...last.sets.map(s=>+s.w||0));
-  const valid=last.sets.filter(s=>s.r!=null&&s.r!=='');
-  const topAll=valid.length>0&&valid.every(s=>+s.r>=ex.repMax&&(s.rir==null||+s.rir>=ex.rirMin));
-  const anyBelow=valid.some(s=>+s.r<ex.repMin);
-  const ground=valid.some(s=>+s.r<ex.repMin&&s.rir!=null&&+s.rir===0);
-  // stall: 3+ sessions at same top weight without topAll
-  let stall=0;
-  for(const p of prev){
-    const pw=Math.max(...p.sets.map(s=>+s.w||0));
-    const pv=p.sets.filter(s=>s.r!=null&&s.r!=='');
-    const pTop=pv.length>0&&pv.every(s=>+s.r>=ex.repMax&&(s.rir==null||+s.rir>=ex.rirMin));
-    if(pw===w&&!pTop)stall++;else break;
+  const prev=lastEntries(ex.id,5);
+  const firstMsg={type:'first',w:null,label:'PRIMEIRA SESSÃO',msg:`Escolha uma carga que dê ${ex.repMin}–${ex.repMax} reps com RIR ${ex.rirMin}${ex.rirMax!==ex.rirMin?'–'+ex.rirMax:''}.`};
+  if(!prev.length)return firstMsg;
+  const A=refAnalysis(prev[0].sets,ex);
+  if(!A)return firstMsg;
+  const w=A.ref;
+  if(A.top&&ex.inc>0)return{type:'up',w:round25(w+ex.inc),label:'SOBE CARGA',msg:`Faixa dominada nas séries de trabalho (${fmt(w)} kg) → sobe para ${fmt(round25(w+ex.inc))} kg.`};
+  if(A.top)return{type:'up',w,label:'PROGRIDE',msg:'Faixa dominada — adicione 1 rep acima do topo ou reduza o RIR.'};
+  /* estagnação: 3+ sessões na mesma carga de referência, sem topo E sem evolução no total de reps */
+  const run=[A];
+  for(let i=1;i<prev.length;i++){
+    const P=refAnalysis(prev[i].sets,ex);
+    if(!P||P.ref!==w||P.top)break;
+    run.push(P);
   }
-  if(topAll&&ex.inc>0)return{type:'up',w:round25(w+ex.inc),label:'SOBE CARGA',msg:`Topo da faixa atingido em todas as séries → ${fmt(w)} + ${fmt(ex.inc)} kg.`};
-  if(topAll)return{type:'up',w,label:'PROGRIDE',msg:'Topo atingido — adicione 1 rep acima da faixa ou reduza o RIR.'};
-  if(stall>=3){const d=round25(w*0.9);return{type:'stall',w:d,label:'ESTAGNOU — MICRODELOAD',msg:`${stall} sessões sem progresso em ${fmt(w)} kg. Recue ~10% (${fmt(d)} kg) e reconstrua, ou troque o exercício.`}}
-  if(ground)return{type:'hold',w:ex.inc>0?round25(Math.max(0,w-ex.inc)):w,label:'SEGURA / REDUZ',msg:`Reps abaixo da faixa com RIR 0 → recue ${fmt(ex.inc)} kg e domine a faixa.`};
-  if(anyBelow)return{type:'hold',w,label:'SEGURA CARGA',msg:'Alguma série abaixo da faixa — mantenha o peso até entrar na faixa completa.'};
-  return{type:'keep',w,label:'MANTÉM — BUSCA REPS',msg:`Mantenha ${fmt(w)} kg e tente +1 rep por série até chegar em ${ex.repMax}.`};
+  const repsGrowing=run.length>=2&&run[0].total>run[1].total;
+  const stalled=run.length>=3&&run[0].total<=run[2].total;
+  if(stalled){const d=round25(w*0.9);return{type:'stall',w:d,label:'ESTAGNOU — MICRODELOAD',msg:`${run.length} sessões em ${fmt(w)} kg sem evolução de reps (${run[2].total} → ${run[0].total}). Recue ~10% (${fmt(d)} kg) e reconstrua, ou troque o exercício.`}}
+  if(A.ground)return{type:'hold',w:ex.inc>0?round25(Math.max(0,w-ex.inc)):w,label:'SEGURA / REDUZ',msg:`Reps abaixo da faixa com RIR 0 → recue ${fmt(ex.inc)} kg e domine a faixa.`};
+  if(A.anyBelow)return{type:'hold',w,label:'SEGURA CARGA',msg:'Série de trabalho abaixo da faixa — mantenha o peso até entrar na faixa completa.'};
+  return{type:'keep',w,label:'MANTÉM — BUSCA REPS',msg:`Mantenha ${fmt(w)} kg e some reps até ${diet.settings.progMode==='flexivel'?'o total ficar a 1 do máximo':'todas as séries baterem '+ex.repMax}.${repsGrowing?' Reps evoluindo ('+run[1].total+' → '+run[0].total+') — no caminho certo.':''}`};
 }
 const round25=v=>Math.round(v/0.25)*0.25;
 const fmt=v=>(+v).toLocaleString('pt-BR',{maximumFractionDigits:2});
@@ -563,77 +562,78 @@ function renderTrain(){
   h+=wo.exercises.map(ex=>{
     const sg=suggest(ex);
     const prev=lastEntries(ex.id,1)[0];
-    const lastSets=prev?prev.sets:[];
-    return `<div class="card" data-ex="${ex.id}" data-rest="${ex.rest||120}" data-exname="${esc(ex.name.split('(')[0].trim())}" data-rirmin="${ex.rirMin}">
+    let lastLine='';
+    if(prev){
+      const v=prev.sets.filter(s=>s.r!=null);
+      const wmax=Math.max(...v.map(s=>+s.w||0));
+      const reps=v.map(s=>s.r).join('/');
+      const rirs=v.filter(s=>s.rir!=null).map(s=>s.rir).join('/');
+      lastLine=`<div class="lastline">Última (${new Date(prev.date).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}): ${fmt(wmax)} kg × ${reps}${rirs?' · RIR '+rirs:''}</div>`;
+    }
+    return `<div class="card">
       <h3>${esc(ex.name)}</h3>
-      <div class="sub">${ex.sets} × ${ex.repMin}–${ex.repMax} reps · RIR ${ex.rirMin}${ex.rirMax!==ex.rirMin?'–'+ex.rirMax:''} · +${fmt(ex.inc)} kg · ⏱ ${ex.rest||120}s</div>
+      <div class="sub">${ex.sets} × ${ex.repMin}–${ex.repMax} reps · RIR ${ex.rirMin}${ex.rirMax!==ex.rirMin?'–'+ex.rirMax:''} · +${fmt(ex.inc)} kg</div>
       <div class="decide ${sg.type}"><b>${sg.label}${sg.w!=null?' · '+fmt(sg.w)+' kg':''}</b></div>
-      <div class="note" style="margin:-4px 0 10px;font-size:12.5px">${sg.msg}</div>
-      <div class="sethead"><span>#</span><span>Carga kg</span><span>Reps</span><span>RIR</span><span>✓</span></div>
-      ${Array.from({length:ex.sets},(_,i)=>{
-        const ls=lastSets[i];
-        let wv=sg.w!=null?sg.w:'';
-        if(ls&&ls.w!=null&&ls.w!==''){
-          if(sg.type==='up'&&ex.inc>0)wv=round25(+ls.w+ex.inc);
-          else if(sg.type==='stall'||sg.type==='hold')wv=sg.w;
-          else wv=+ls.w;
-        }
-        const rp=(sg.type==='keep'&&ls&&ls.r!=null)?Math.min(ex.repMax,+ls.r+1):null;
-        return `
-        <div class="setrow"><span class="n">${i+1}</span>
-          <input type="number" inputmode="decimal" step="0.25" placeholder="${wv!==''?fmt(wv):'—'}" value="${wv!==''?wv:''}" data-f="w" data-i="${i}">
-          <input type="number" inputmode="numeric" placeholder="${rp!=null?'alvo '+rp:ex.repMin+'–'+ex.repMax}" data-f="r" data-i="${i}">
-          <input type="number" inputmode="numeric" placeholder="${ex.rirMin}" data-f="rir" data-i="${i}">
-          <button class="chk" data-chk="${i}">✓</button>
-        </div>`}).join('')}
+      <div class="note" style="margin:-4px 0 0;font-size:12.5px">${sg.msg}</div>
+      ${lastLine}
     </div>`;
   }).join('');
-  h+=`<button class="btn" id="saveSession">Salvar sessão — ${esc(wo.name)}</button>`;
+  const un=unmatchedHevy();
+  if(un.length){
+    const opts='<option value="">— escolher —</option>'+program.map(w2=>w2.exercises.map(ex=>`<option value="${ex.id}">${esc(w2.name)}: ${esc(ex.name)}</option>`).join('')).join('');
+    h+=`<div class="card"><h3>🔗 Exercícios do Hevy sem vínculo</h3>
+      <p class="note" style="margin:8px 0 4px">Vincule cada um ao exercício correspondente do programa — o histórico passa a alimentar a progressão e importações futuras já chegam conectadas.</p>
+      ${un.map(u=>`<div class="linkrow"><span>${esc(u.name)} <span class="tag">${u.count}× no histórico</span></span><select data-link="${esc(u.exId)}">${opts}</select></div>`).join('')}
+      <button class="btn ghost" id="dolink" style="margin-top:12px">Vincular selecionados</button>
+    </div>`;
+  }
   view.innerHTML=h;
   view.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{selWorkout=c.dataset.wo;render()});
   const dl=document.getElementById('deloaddone');
   if(dl)dl.onclick=async()=>{diet.settings.lastDeload=todayISO();await saveDiet();await touchAndPush();toast('✓ Deload registrado');render()};
   view.querySelectorAll('.setrow input').forEach(i=>i.addEventListener('input',()=>i.classList.toggle('done',i.value!=='')));
-  view.querySelectorAll('.chk').forEach(btn=>btn.onclick=()=>{
-    const row=btn.closest('.setrow'), card=btn.closest('.card');
-    if(btn.classList.contains('on')){btn.classList.remove('on');row.classList.remove('donerow');return}
-    const wIn=row.querySelector('[data-f="w"]'), rIn=row.querySelector('[data-f="r"]'), riIn=row.querySelector('[data-f="rir"]');
-    if(rIn.value===''){rIn.focus();toast('Registre as reps antes de concluir');return}
-    if(wIn.value===''&&wIn.placeholder!=='—')wIn.value=wIn.placeholder.replace(',','.');
-    if(riIn.value==='')riIn.value=card.dataset.rirmin;
-    [wIn,rIn,riIn].forEach(x=>x.classList.toggle('done',x.value!==''));
-    btn.classList.add('on');row.classList.add('donerow');
-    startRest(+card.dataset.rest||120,card.dataset.exname);
-  });
-  document.getElementById('saveSession').onclick=saveSession;
+  const dlk=document.getElementById('dolink');
+  if(dlk)dlk.onclick=async()=>{
+    let n=0;
+    for(const sel of view.querySelectorAll('select[data-link]')){
+      if(sel.value){await linkHevy(sel.dataset.link,sel.value);n++}
+    }
+    if(!n){toast('Escolha ao menos um vínculo');return}
+    toast('✓ '+n+' exercício(s) vinculados');
+    render();
+  };
 }
-async function saveSession(){
-  const wo=program.find(w=>w.id===selWorkout);
-  const entries=[];
-  view.querySelectorAll('.card[data-ex]').forEach(card=>{
-    const exId=card.dataset.ex;
-    const ex=wo.exercises.find(e=>e.id===exId);
-    const sets=Array.from({length:ex.sets},()=>({w:null,r:null,rir:null}));
-    card.querySelectorAll('input').forEach(inp=>{
-      const i=+inp.dataset.i,f=inp.dataset.f;
-      if(inp.value!=='')sets[i][f]=+inp.value;
-      else if(f==='w'&&inp.placeholder!=='—')sets[i].w=null;
-    });
-    if(sets.some(s=>s.r!=null))entries.push({exId,exName:ex.name,sets});
-  });
-  if(!entries.length){toast('Preencha ao menos as reps de 1 exercício');return}
-  history.push({id:uid(),date:new Date().toISOString(),workoutId:wo.id,workoutName:wo.name,entries});
-  await saveHistory();
-  await touchAndPush();
-  clearInterval(rtTick);rtTick=null;
-  const rtEl=document.getElementById('resttimer');if(rtEl)rtEl.classList.remove('on');
-  toast('✓ Sessão salva');
-  render();
+async function linkHevy(hevyExId,progExId){
+  let target=null;
+  for(const wo of program){const ex=wo.exercises.find(x=>x.id===progExId);if(ex){target=ex;break}}
+  if(!target)return;
+  target.hevyId=String(hevyExId).replace(/^hevy_/,'');
+  for(const s of history)for(const e of s.entries)if(e.exId===hevyExId){e.exId=target.id;e.exName=target.name}
+  await saveHistory();await saveProgram();await touchAndPush();
+}
+function unmatchedHevy(){
+  const m={};
+  for(const s of history)for(const e of s.entries){
+    if(String(e.exId).startsWith('hevy_')){
+      if(!m[e.exId])m[e.exId]={exId:e.exId,name:e.exName,count:0};
+      m[e.exId].count++;
+    }
+  }
+  return Object.values(m).sort((a,b)=>b.count-a.count);
 }
 
 /* ---- PROGRAM (editable) ---- */
 function renderProgram(){
-  let h=program.map((wo,wi)=>`<div class="card">
+  const pm=diet.settings.progMode||'conservador';
+  let h=`<div class="card">
+    <h3>Modo de progressão</h3>
+    <div class="modegrid" style="grid-template-columns:1fr 1fr">
+      <button data-pm="conservador" class="${pm==='conservador'?'on':''}">Conservador</button>
+      <button data-pm="flexivel" class="${pm==='flexivel'?'on':''}">Flexível</button>
+    </div>
+    <p class="note" style="font-size:12.5px"><b>Conservador:</b> sobe carga só quando todas as séries de trabalho batem o topo da faixa. <b>Flexível:</b> sobe quando o total de reps fica a 1 do máximo (ex.: 10/10/9 em 3×8-10 já progride). Ambos exigem RIR dentro do alvo.</p>
+  </div>`;
+  h+=program.map((wo,wi)=>`<div class="card">
     <div class="exhead">
       <input type="text" value="${esc(wo.name)}" data-wname="${wo.id}" style="background:none;border:none;color:var(--text);font:800 17px inherit;width:60%">
       <span>
@@ -654,14 +654,24 @@ function renderProgram(){
         <div class="fld"><label>RIR mín</label><input type="number" value="${ex.rirMin}" data-e="rirMin"></div>
         <div class="fld"><label>RIR máx</label><input type="number" value="${ex.rirMax}" data-e="rirMax"></div>
         <div class="fld"><label>Incr. kg</label><input type="number" step="0.25" value="${ex.inc}" data-e="inc"></div>
-        <div class="fld"><label>Desc. (s)</label><input type="number" step="5" value="${ex.rest||120}" data-e="rest"></div>
       </div>
     </div>`).join('')}
   </div>`).join('');
-  h+=`<button class="btn ghost" id="addwo">+ Adicionar treino</button>
+  h+=`${hevyKey?`<button class="btn ghost" id="impRoutines">⬇ Importar rotinas do Hevy</button>`:`<p class="note" style="margin:6px 0">Para importar suas rotinas direto do Hevy, configure a chave da API na aba Dados.</p>`}
+      <button class="btn ghost" id="addwo" style="margin-top:10px">+ Adicionar treino</button>
       <button class="btn" id="saveprog" style="margin-top:10px">Salvar programa</button>
-      <p class="note" style="margin-top:12px">As mudanças aqui atualizam automaticamente a lista da aba <b>Treinar</b>. O histórico antigo é preservado — a progressão de um exercício segue pelo seu registro, mesmo se você renomear.</p>`;
+      <p class="note" style="margin-top:12px">A importação do Hevy atualiza nomes, séries, faixas de reps e a ordem — e <b>preserva</b> o RIR, o incremento e o histórico dos exercícios já vinculados, mesmo que mudem de treino (ex.: migração Upper/Lower → PPL). Exercícios novos entram com RIR 1-2 e incremento automático para você refinar.</p>`;
   view.innerHTML=h;
+  view.querySelectorAll('[data-pm]').forEach(b=>b.onclick=async()=>{diet.settings.progMode=b.dataset.pm;await saveDiet();await touchAndPush();toast('✓ Modo '+b.dataset.pm);renderProgram()});
+  const ir=document.getElementById('impRoutines');
+  if(ir)ir.onclick=async()=>{
+    harvest();
+    toast('Importando rotinas…');
+    const r=await hevyImportRoutines();
+    if(r.err){toast('⚠️ '+r.err);return}
+    toast(`✓ ${r.created} novo(s), ${r.updated} atualizado(s), ${r.moved} movido(s), ${r.newEx} exercício(s) novos`);
+    renderProgram();
+  };
   document.getElementById('addwo').onclick=()=>{program.push({id:uid(),name:'Novo treino',exercises:[]});renderProgram()};
   document.getElementById('saveprog').onclick=async()=>{harvest();await saveProgram();await touchAndPush();toast('✓ Programa salvo');};
   view.querySelectorAll('[data-addex]').forEach(b=>b.onclick=()=>{harvest();const wo=program.find(w=>w.id===b.dataset.addex);wo.exercises.push({id:uid(),name:'Novo exercício',sets:3,repMin:8,repMax:10,rirMin:1,rirMax:2,inc:2.5});renderProgram()});
@@ -1336,55 +1346,68 @@ async function hevySync(manual){
   }catch(e){return{n:added,err:e&&e.message?e.message:'rede/CORS'}}
 }
 
-/* ============ rest timer ============ */
-let rtEnd=0, rtTotal=1, rtTick=null, audioCtx=null;
-function rtUnlockAudio(){try{if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume()}catch(e){}}
-function rtBeep(){
-  if(!audioCtx)return;
+async function hevyImportRoutines(){
+  if(!hevyKey)return{err:'configure a chave do Hevy na aba Dados'};
+  let page=1, routines=[];
   try{
-    for(let i=0;i<3;i++){
-      const o=audioCtx.createOscillator(), g=audioCtx.createGain();
-      o.connect(g);g.connect(audioCtx.destination);
-      o.frequency.value=880;o.type='sine';
-      const t=audioCtx.currentTime+i*0.35;
-      g.gain.setValueAtTime(0.001,t);g.gain.exponentialRampToValueAtTime(0.4,t+0.02);g.gain.exponentialRampToValueAtTime(0.001,t+0.28);
-      o.start(t);o.stop(t+0.3);
+    while(page<=10){
+      const r=await fetch('https://api.hevyapp.com/v1/routines?page='+page+'&pageSize=10',{headers:{'api-key':hevyKey}});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=await r.json();
+      const list=d.routines||[];
+      routines.push(...list);
+      if(list.length<10)break;
+      page++;
     }
-  }catch(e){}
-}
-function startRest(sec,label){
-  rtUnlockAudio();
-  rtTotal=Math.max(1,sec);rtEnd=Date.now()+sec*1000;
-  const el=document.getElementById('resttimer');
-  el.classList.add('on');el.classList.remove('done');
-  document.getElementById('rtlabel').textContent=label||'Descanso';
-  clearInterval(rtTick);rtTick=setInterval(rtUpdate,250);rtUpdate();
-}
-function rtUpdate(){
-  const el=document.getElementById('resttimer');
-  const rem=Math.ceil((rtEnd-Date.now())/1000);
-  if(rem<=0){
-    clearInterval(rtTick);rtTick=null;
-    document.getElementById('rttime').textContent='0:00';
-    document.getElementById('rtfill').style.width='0%';
-    el.classList.add('done');
-    rtBeep();
-    if(navigator.vibrate)navigator.vibrate([250,120,250]);
-    setTimeout(()=>{if(el.classList.contains('done'))el.classList.remove('on')},5000);
-    return;
+  }catch(e){return{err:e&&e.message?e.message:'rede/CORS'}}
+  if(!routines.length)return{err:'nenhuma rotina encontrada no Hevy'};
+  let created=0,updated=0,moved=0,newEx=0;
+  const seenRid=new Set();
+  for(const rt of routines){
+    seenRid.add(rt.id);
+    let wo=program.find(w=>w.hevyRid===rt.id)||program.find(w=>normName(w.name)===normName(rt.title));
+    if(!wo){wo={id:uid(),name:rt.title||'Treino',hevyRid:rt.id,exercises:[]};program.push(wo);created++}
+    else{wo.hevyRid=rt.id;wo.name=rt.title||wo.name;updated++}
+    const newList=[];
+    for(const he of (rt.exercises||[])){
+      const tid=he.exercise_template_id;
+      const work=(he.sets||[]).filter(s=>s.type!=='warmup');
+      const nSets=Math.max(1,work.length);
+      let rmin=null,rmax=null;
+      for(const s of work){
+        const lo=s.rep_range&&s.rep_range.start!=null?+s.rep_range.start:(s.reps!=null?+s.reps:null);
+        const hi=s.rep_range&&s.rep_range.end!=null?+s.rep_range.end:(s.reps!=null?+s.reps:null);
+        if(lo!=null)rmin=rmin==null?lo:Math.min(rmin,lo);
+        if(hi!=null)rmax=rmax==null?hi:Math.max(rmax,hi);
+      }
+      let ex=null,fromWo=null;
+      if(tid)for(const w2 of program){const f=w2.exercises.find(x=>x.hevyId===tid);if(f){ex=f;fromWo=w2;break}}
+      if(ex){
+        /* já existe: preserva id (histórico), RIR e incremento; move de treino se necessário */
+        if(fromWo!==wo){fromWo.exercises=fromWo.exercises.filter(x=>x!==ex);moved++}
+        ex.name=he.title||ex.name;
+        ex.sets=nSets;
+        if(rmin!=null)ex.repMin=rmin;
+        if(rmax!=null)ex.repMax=Math.max(rmax,ex.repMin);
+      }else{
+        const rMin=rmin!=null?rmin:8, rMax=rmax!=null?Math.max(rmax,rMin):12;
+        ex={id:uid(),name:he.title||'Exercício',sets:nSets,repMin:rMin,repMax:rMax,rirMin:1,rirMax:2,inc:rMin<=8?2.5:1.25,rest:120,hevyId:tid||null};
+        newEx++;
+      }
+      newList.push(ex);
+    }
+    if(newList.length)wo.exercises=newList;
   }
-  document.getElementById('rttime').textContent=Math.floor(rem/60)+':'+String(rem%60).padStart(2,'0');
-  document.getElementById('rtfill').style.width=Math.min(100,rem/rtTotal*100)+'%';
+  const obsolete=program.filter(w=>(w.hevyRid&&!seenRid.has(w.hevyRid))||w.exercises.length===0);
+  if(obsolete.length){
+    if(confirm('Estes treinos não existem mais no Hevy (ou ficaram vazios):\n\n'+obsolete.map(w=>'• '+w.name).join('\n')+'\n\nRemover do programa? (o histórico deles é preservado)')){
+      program=program.filter(w=>!obsolete.includes(w));
+    }
+  }
+  if(!program.find(w=>w.id===selWorkout))selWorkout=program[0]?.id;
+  await saveProgram();await touchAndPush();
+  return{created,updated,moved,newEx};
 }
-document.querySelectorAll('#resttimer button').forEach(b=>b.onclick=()=>{
-  const a=b.dataset.rt;
-  if(a==='skip'){clearInterval(rtTick);rtTick=null;document.getElementById('resttimer').classList.remove('on');return}
-  if(!rtTick)return;
-  rtEnd+=(+a)*1000;
-  if(rtEnd<Date.now())rtEnd=Date.now();
-  rtTotal=Math.max(rtTotal+ +a,Math.ceil((rtEnd-Date.now())/1000),1);
-  rtUpdate();
-});
 
 /* ============ util ============ */
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
