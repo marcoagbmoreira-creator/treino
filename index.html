@@ -727,7 +727,8 @@ function renderData(){
       <input type="text" id="hevykey" placeholder="chave da API do Hevy" value="${esc(hevyKey||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono);margin-top:8px">
       <button class="btn ghost" id="hevysave" style="margin-top:10px">Salvar chave</button>
     </details>
-    ${hevyKey?`<button class="btn ghost" id="hevyimp" style="margin-top:10px">Importar todo o histórico agora</button>`:''}
+    ${hevyKey?`<button class="btn ghost" id="hevyimp" style="margin-top:10px">Importar todo o histórico agora</button>
+    <button class="btn danger" id="hevyreset" style="margin-top:10px">Refazer vínculos e reimportar do zero</button>`:''}
     ${hevyLast?`<p class="note" style="margin-top:8px;font-family:var(--mono);font-size:12px">Última importação: ${new Date(hevyLast).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>`:''}
     <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Dica: registre o <b>RPE</b> nas séries do Hevy (RIR = 10 − RPE) para o algoritmo decidir com precisão. Sem RPE, ele assume que o RIR alvo foi respeitado. Séries de aquecimento são ignoradas.</p>
   </div>
@@ -784,6 +785,19 @@ function renderData(){
     const r=await hevySync(true);
     if(r.err)toast('⚠️ Falha ('+r.err+') — '+r.n+' importados antes do erro');
     else toast('✓ '+r.n+' treino(s) importados');
+    renderData();
+  };
+  const hvr=document.getElementById('hevyreset');
+  if(hvr)hvr.onclick=async()=>{
+    if(!confirm('Refazer vínculos: limpa TODOS os vínculos exercício↔Hevy, remove os treinos importados e reimporta tudo do zero com o casamento corrigido. Sessões registradas manualmente são preservadas. Continuar?'))return;
+    for(const wo of program)for(const ex of wo.exercises)delete ex.hevyId;
+    history=history.filter(h=>!h.hevyId);
+    await saveProgram();await saveHistory();
+    toast('Reimportando do zero…');
+    const r=await hevySync(true);
+    if(r.err)toast('⚠️ '+r.err+' — '+r.n+' reimportados');
+    else toast('✓ '+r.n+' treino(s) reimportados');
+    await touchAndPush();
     renderData();
   };
   const ghs=document.getElementById('ghsave');
@@ -1286,14 +1300,16 @@ function matchProgramEx(he){
   for(const wo of program)for(const ex of wo.exercises)if(ex.hevyId&&ex.hevyId===he.exercise_template_id)return ex;
   const ht=normName(he.title);
   if(!ht)return null;
+  const hset=new Set(ht.split(' ').filter(t=>t.length>3));
   let best=null,bestScore=0;
   for(const wo of program)for(const ex of wo.exercises){
-    const et=normName(ex.name);
+    if(ex.hevyId)continue; /* já vinculado a outro template — nunca roubar o vínculo */
+    const eset=new Set(normName(ex.name).split(' ').filter(t=>t.length>3));
     let score=0;
-    for(const t of et.split(' '))if(t.length>3&&ht.includes(t))score++;
-    for(const t of ht.split(' '))if(t.length>3&&et.includes(t))score++;
+    for(const t of eset)if(hset.has(t))score++;
     if(score>bestScore){bestScore=score;best=ex}
   }
+  /* exige 2+ palavras distintas em comum — 1 palavra ("press") não basta */
   if(best&&bestScore>=2){best.hevyId=he.exercise_template_id;return best}
   return null;
 }
