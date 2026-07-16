@@ -425,7 +425,7 @@ function weekbar(){
 
 /* ---- HOME / DASHBOARD ---- */
 function dISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-function sessionsByDay(){const m={};for(const s of history){const k=s.date.slice(0,10);(m[k]=m[k]||[]).push(s)}return m}
+function sessionsByDay(){const m={};for(const s of history){const k=dISO(new Date(s.date));(m[k]=m[k]||[]).push(s)}return m}
 function weightStreak(){
   let n=0, d=new Date();
   const has=k=>{const e=diet.entries[k];return e&&e.weight!=null&&e.weight!==''};
@@ -554,7 +554,7 @@ function renderTrain(){
   if(!program.length){view.innerHTML='<div class="empty">Nenhum treino no programa. Crie um na aba Programa.</div>';return}
   if(!program.find(w=>w.id===selWorkout))selWorkout=program[0].id;
   const wo=program.find(w=>w.id===selWorkout);
-  const dlRef=diet.settings.lastDeload||(history.length?history[0].date.slice(0,10):null);
+  const dlRef=diet.settings.lastDeload||(history.length?dISO(new Date(history[0].date)):null);
   const dlWks=dlRef?Math.floor((Date.now()-new Date(dlRef).getTime())/6048e5):0;
   let bn='';
   if(dlRef&&dlWks>=6)bn=`<div class="decide stall" style="margin-bottom:14px"><b>DELOAD SUGERIDO</b><span style="font-size:12.5px;color:var(--muted)">${dlWks} semanas sem deload — faça uma semana com metade das séries e cargas ~15% menores. <button class="mini up2" id="deloaddone" style="padding:0 4px;text-decoration:underline">marcar como feito</button></span></div>`;
