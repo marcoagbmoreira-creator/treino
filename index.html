@@ -172,6 +172,11 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
 .daydetail{margin-top:12px;background:var(--surface2);border-radius:10px;padding:12px;font-size:13.5px}
 .daydetail .dtitle{font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:6px}
 .daydetail .s{font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7}
+.macbar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin-top:12px;background:var(--bg)}
+.macbar span{height:100%}
+.m-p{background:#4ade80}.m-c{background:#f5a623}.m-f{background:#60a5fa}
+.maclegend{display:flex;gap:14px;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--muted);flex-wrap:wrap}
+.maclegend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .empty{text-align:center;color:var(--faint);padding:30px 10px;font-size:14px}
@@ -215,7 +220,7 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
 /* ============ state & storage ============ */
 const K_PROG='ul_program_v1', K_HIST='ul_history_v1', K_KEY='ul_apikey_v1', K_MODEL='ul_aimodel_v1', K_GH='ul_ghtoken_v1', K_GIST='ul_gist_v1', K_UPD='ul_updated_v1', K_DIET='ul_diet_v1', K_HEVY='ul_hevykey_v1', K_HSYNC='ul_hevysync_v1';
 let program=[], history=[], tab='home', selWorkout=null, memOnly=false, apiKey='', aiModel='gemini-2.5-flash', ghToken='', gistId='', updatedAt=0, syncState='', hevyKey='', hevyLast='';
-let diet={entries:{},settings:{mode:'deficit',rate:0.4,protTarget:180,tdee0:2820}}, dietRange=30, homeMonth=new Date(), homeSel=null;
+let diet={entries:{},settings:{mode:'deficit',rate:0.4,protTarget:180,protPerKg:2.1,fatPct:25,tdee0:2820}}, dietRange=30, homeMonth=new Date(), homeSel=null;
 
 const uid=()=>Math.random().toString(36).slice(2,9);
 
@@ -688,7 +693,8 @@ function harvest(){ /* read edits from DOM into state */
     for(const wo of program){const ex=wo.exercises.find(e=>e.id===id);if(ex){
       box.querySelectorAll('[data-e]').forEach(inp=>{
         const k=inp.dataset.e;
-        ex[k]=k==='name'?(inp.value.trim()||ex.name):+inp.value;
+        if(k==='name')ex[k]=inp.value.trim()||ex.name;
+        else{const v=numBR(inp.value);if(v!=null)ex[k]=v}
       });
       if(ex.repMax<ex.repMin)ex.repMax=ex.repMin;
       if(ex.rirMax<ex.rirMin)ex.rirMax=ex.rirMin;
@@ -972,12 +978,13 @@ function buildContext(){
     }
   }
   const t=computeTDEE(), wr=weeklyRate(), tk=targetKcal(), tr=computeTrend();
+  const MM=computeMacros(tk);
   const twd=Object.keys(tr).sort();
   if(twd.length){
     lines.push('\nDieta: peso tendência atual '+tr[twd[twd.length-1]].toFixed(1)+' kg'
       +(wr!=null?' | ritmo '+(wr>0?'+':'')+wr.toFixed(2)+' kg/sem':'')
       +(t?' | TDEE observado ~'+t.tdee+' kcal (média ingerida '+t.avgK+' kcal, janela '+t.days+'d)':' | TDEE ainda em calibração')
-      +' | objetivo: '+diet.settings.mode+' '+diet.settings.rate+' kg/sem, meta '+tk.goal+' kcal, proteína '+diet.settings.protTarget+'g');
+      +' | objetivo: '+diet.settings.mode+' '+diet.settings.rate+' kg/sem | metas: '+tk.goal+' kcal, P '+MM.prot+'g / C '+MM.carbs+'g / G '+MM.fatG+'g');
   }
   const dates=[...new Set(history.map(h=>new Date(h.date).toLocaleDateString('pt-BR')))];
   lines.push('\nTotal de sessões registradas: '+history.length+(dates.length?' | Últimas datas: '+dates.slice(-12).join(', '):''));
@@ -1103,8 +1110,23 @@ function targetKcal(){
   }
   return{goal:s.lastCoach.goal,base,observed:!!t,next:7-daysSince,changed:false};
 }
+function computeMacros(tk){
+  /* filosofia MacroFactor: proteína por kg de peso (tendência), gordura como piso (% kcal com mínimo em g/kg), carbo preenche o resto */
+  const tr=computeTrend(), wd=Object.keys(tr).sort();
+  const wkg=wd.length?tr[wd[wd.length-1]]:((diet.settings.profile&&diet.settings.profile.w)||86);
+  const s=diet.settings;
+  const perKg=s.protPerKg||2.1, fatPct=s.fatPct||25;
+  const prot=Math.round(perKg*wkg);
+  let fatG=Math.round(tk.goal*fatPct/100/9);
+  const minFat=Math.round(0.6*wkg); /* piso hormonal ~0,6 g/kg */
+  if(fatG<minFat)fatG=minFat;
+  let carbs=Math.round((tk.goal-prot*4-fatG*9)/4);
+  if(carbs<0)carbs=0;
+  return{kcal:tk.goal,prot,fatG,carbs,wkg,pk:prot*4,fk:fatG*9,ck:carbs*4};
+}
 function renderDiet(){
   const t=computeTDEE(), rate=weeklyRate(), tk=targetKcal(), trend=computeTrend();
+  const M=computeMacros(tk);
   const wd=Object.keys(trend).sort();
   const curTrend=wd.length?trend[wd[wd.length-1]]:null;
   const first=wd.length?trend[wd[0]]:null;
@@ -1123,7 +1145,7 @@ function renderDiet(){
     </div>
     <div class="dgrid" style="margin-top:10px">
       <div class="dfld"><label>Kcal total (do MyFitnessPal)</label><input type="number" inputmode="numeric" id="dkcal" placeholder="2500" value="${te.kcal??''}"></div>
-      <div class="dfld"><label>Proteína (g) — opcional</label><input type="number" inputmode="numeric" id="dprot" placeholder="${s.protTarget}" value="${te.prot??''}"></div>
+      <div class="dfld"><label>Proteína (g) — opcional</label><input type="number" inputmode="numeric" id="dprot" placeholder="${M.prot}" value="${te.prot??''}"></div>
     </div>
     <label class="chkrow"><input type="checkbox" id="dinc" ${te.inc?'checked':''}> Dia incompleto (registro alimentar não confiável — fica fora do cálculo)</label>
     <button class="btn" id="dsave" style="margin-top:12px">Salvar dia</button>
@@ -1136,12 +1158,27 @@ function renderDiet(){
       <div class="stat"><div class="v acc">${t?fmt(t.tdee):'—'}</div><div class="l">TDEE observado</div></div>
       <div class="stat"><div class="v">${fmt(tk.goal)}</div><div class="l">Meta kcal (${modeLabel[s.mode]})</div></div>
       <div class="stat"><div class="v">${(curTrend&&first)?((curTrend-first>=0?'+':'')+fmt((curTrend-first).toFixed(1))+' kg'):'—'}</div><div class="l">Desde o início</div></div>
-      <div class="stat"><div class="v">${s.protTarget} g</div><div class="l">Meta proteína</div></div>
+      <div class="stat"><div class="v">${M.prot} g</div><div class="l">Proteína (${fmt(M.wkg>0?(diet.settings.protPerKg||2.1):0)} g/kg)</div></div>
     </div>
     <div class="coach">${
       t?`TDEE: <b>~${fmt(t.tdee)} kcal/dia</b> (confiança ${(t.conf*100).toFixed(0)}%${t.conf<1?' — converge com mais registros':''}; média ingerida ${fmt(t.avgK)} kcal em ${t.nK} dias completos, janela ${t.days}d). Meta para ${modeLabel[s.mode].toLowerCase()}${s.mode!=='maint'?' de '+fmt(s.rate)+' kg/sem':''}: <b>${fmt(tk.goal)} kcal/dia</b>${tk.changed?' — ajustada no check-in de hoje':''}. Próximo check-in do coach: <b>${tk.next}d</b>.${rateOk!=null&&rateOk>0.75&&s.mode==='deficit'?' ⚠️ Ritmo acima de 0,75%/sem do peso — risco de perda de massa; reduza o déficit.':''}`
       :`Calibrando: registre <b>peso diário</b> e <b>kcal</b>. O TDEE aparece com ~4 pesagens em 7+ dias e 4 dias completos de kcal, e ganha confiança até ~2-3 semanas. Meta atual (estimativa inicial de ${fmt(s.tdee0)} kcal): <b>${fmt(tk.goal)} kcal/dia</b>. Registros com peso: ${nEntries}.`
     }</div>
+  </div>
+  <div class="card">
+    <h3>Metas de macros — hoje</h3>
+    <div class="macbar">
+      <span class="m-p" style="width:${(M.pk/M.kcal*100).toFixed(1)}%"></span>
+      <span class="m-c" style="width:${(M.ck/M.kcal*100).toFixed(1)}%"></span>
+      <span class="m-f" style="width:${(M.fk/M.kcal*100).toFixed(1)}%"></span>
+    </div>
+    <div class="maclegend">
+      <span><i class="m-p"></i>Proteína <b>${M.prot} g</b></span>
+      <span><i class="m-c"></i>Carboidrato <b>${M.carbs} g</b></span>
+      <span><i class="m-f"></i>Gordura <b>${M.fatG} g</b></span>
+      <span>= ${fmt(M.kcal)} kcal</span>
+    </div>
+    <p class="note" style="margin-top:10px;font-size:12.5px">Proteína ancorada no seu peso-tendência (${fmt(M.wkg.toFixed(1))} kg) · gordura como piso hormonal · carboidrato preenche o resto — concentre-o antes e depois do treino. Os números se recalculam sozinhos conforme a meta e o peso mudam.</p>
   </div>
   <div class="card">
     <h3>Evolução do peso</h3>
@@ -1162,8 +1199,12 @@ function renderDiet(){
     </div>
     <div class="dgrid g3">
       <div class="dfld"><label>Taxa (kg/sem)</label><input type="number" step="0.05" id="drate" value="${s.rate}" ${s.mode==='maint'?'disabled':''}></div>
-      <div class="dfld"><label>Proteína (g)</label><input type="number" id="dptarget" value="${s.protTarget}"></div>
+      <div class="dfld"><label>Prot. (g/kg)</label><input type="number" step="0.1" id="dpkg" value="${s.protPerKg||2.1}"></div>
+      <div class="dfld"><label>Gord. (% kcal)</label><input type="number" step="1" id="dfat" value="${s.fatPct||25}"></div>
+    </div>
+    <div class="dgrid" style="margin-top:10px">
       <div class="dfld"><label>TDEE inicial</label><input type="number" id="dtdee0" value="${s.tdee0}"></div>
+      <div class="dfld"></div>
     </div>
     <p class="note" style="margin-top:8px;font-size:12px">Referências: recomposição = déficit 0,25-0,5 kg/sem · superávit magro = 0,1-0,25 kg/sem. O TDEE inicial só vale até o algoritmo convergir (~2-3 semanas).</p>
     <details style="margin-top:10px">
@@ -1207,43 +1248,49 @@ function renderDiet(){
   document.getElementById('dsave').onclick=async()=>{
     const d=document.getElementById('ddate').value;
     if(!d){toast('Escolha a data');return}
-    const w=document.getElementById('dweight').value, k=document.getElementById('dkcal').value, p=document.getElementById('dprot').value, inc=document.getElementById('dinc').checked;
-    if(w===''&&k===''){toast('Preencha peso e/ou kcal');return}
-    if(w!==''){
+    const w=numBR(document.getElementById('dweight').value), k=numBR(document.getElementById('dkcal').value), p=numBR(document.getElementById('dprot').value), inc=document.getElementById('dinc').checked;
+    if(w==null&&k==null){toast('Preencha peso e/ou kcal');return}
+    if(w!=null){
       const tr0=computeTrend(), kk=Object.keys(tr0).sort();
       if(kk.length){
         const lt=tr0[kk[kk.length-1]];
-        if(Math.abs(+w-lt)>2.5&&!confirm('Peso '+fmt(w)+' kg difere '+fmt(Math.abs(+w-lt).toFixed(1))+' kg da tendência atual ('+fmt(lt.toFixed(1))+' kg). Salvar mesmo assim?'))return;
+        if(Math.abs(w-lt)>2.5&&!confirm('Peso '+fmt(w)+' kg difere '+fmt(Math.abs(w-lt).toFixed(1))+' kg da tendência atual ('+fmt(lt.toFixed(1))+' kg). Salvar mesmo assim?'))return;
       }
     }
-    diet.entries[d]={weight:w!==''?+w:null,kcal:k!==''?+k:null,prot:p!==''?+p:null,inc};
+    diet.entries[d]={weight:w,kcal:k,prot:p,inc};
     await saveDiet();await touchAndPush();
     toast('✓ Dia salvo');renderDiet();
   };
   view.querySelectorAll('.modegrid button').forEach(b=>b.onclick=async()=>{diet.settings.mode=b.dataset.m;diet.settings.lastCoach=null;await saveDiet();await touchAndPush();renderDiet()});
   document.getElementById('dsetsave').onclick=async()=>{
-    diet.settings.rate=Math.abs(+document.getElementById('drate').value)||0.4;
-    diet.settings.protTarget=+document.getElementById('dptarget').value||180;
-    diet.settings.tdee0=+document.getElementById('dtdee0').value||2820;
+    const rv=numBR(document.getElementById('drate').value);
+    diet.settings.rate=Math.min(1.2,Math.max(0.1,rv!=null?Math.abs(rv):0.4));
+    const pk=numBR(document.getElementById('dpkg').value);
+    diet.settings.protPerKg=Math.min(3.5,Math.max(1.2,pk!=null?pk:2.1));
+    const fp=numBR(document.getElementById('dfat').value);
+    diet.settings.fatPct=Math.min(45,Math.max(15,fp!=null?fp:25));
+    const td=numBR(document.getElementById('dtdee0').value);
+    diet.settings.tdee0=td!=null&&td>800?Math.round(td):diet.settings.tdee0;
     diet.settings.lastCoach=null;
+    diet.settings.protTarget=null;
     await saveDiet();await touchAndPush();
-    toast('✓ Objetivo salvo');renderDiet();
+    toast('✓ Objetivo salvo — taxa '+fmt(diet.settings.rate)+' kg/sem');renderDiet();
   };
   view.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{dietRange=+b.dataset.r;renderDiet()});
   const cc=document.getElementById('ccalc');
   if(cc)cc.onclick=async()=>{
-    const age=+document.getElementById('cAge').value, hcm=+document.getElementById('cH').value, w=+document.getElementById('cW').value;
-    const bf=document.getElementById('cBF').value, sex=document.getElementById('cSex').value, act=+document.getElementById('cAct').value;
+    const age=numBR(document.getElementById('cAge').value), hcm=numBR(document.getElementById('cH').value), w=numBR(document.getElementById('cW').value);
+    const bf=numBR(document.getElementById('cBF').value), sex=document.getElementById('cSex').value, act=+document.getElementById('cAct').value;
     if(!age||!hcm||!w){toast('Preencha idade, altura e peso');return}
     let bmr;
-    if(bf!==''&&+bf>0&&+bf<60){
-      bmr=370+21.6*(w*(1-+bf/100)); /* Katch-McArdle: massa magra */
+    if(bf!=null&&bf>0&&bf<60){
+      bmr=370+21.6*(w*(1-bf/100)); /* Katch-McArdle: massa magra */
     }else{
       bmr=sex==='f'?10*w+6.25*hcm-5*age-161:10*w+6.25*hcm-5*age+5; /* Mifflin-St Jeor */
     }
     const tdee=Math.round(bmr*act);
     diet.settings.tdee0=tdee;
-    diet.settings.profile={age,h:hcm,w,bf:bf!==''?+bf:null,sex,act};
+    diet.settings.profile={age,h:hcm,w,bf:bf!=null?bf:null,sex,act};
     diet.settings.lastCoach=null;
     await saveDiet();await touchAndPush();
     toast('✓ TDEE inicial: '+fmt(tdee)+' kcal/dia');
@@ -1426,6 +1473,7 @@ async function hevyImportRoutines(){
 }
 
 /* ============ util ============ */
+const numBR=v=>{if(v==null||v==='')return null;const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?null:n};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._to);t._to=setTimeout(()=>t.classList.remove('show'),2600)}
 /* ============ PIN lock ============ */
