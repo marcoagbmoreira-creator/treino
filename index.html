@@ -1138,17 +1138,25 @@ function renderDiet(){
   const rateOk=rate!=null&&curTrend?Math.abs(rate)/curTrend*100:null;
   view.innerHTML=`
   <div class="card">
-    <h3>Registro do dia</h3>
+    <h3>⚖️ Peso</h3>
     <div class="dgrid" style="margin-top:10px">
-      <div class="dfld"><label>Data</label><input type="date" id="ddate" value="${today}" max="${today}" style="font-size:14px"></div>
+      <div class="dfld"><label>Data</label><input type="date" id="wdate" value="${today}" max="${today}" style="font-size:14px"></div>
       <div class="dfld"><label>Peso (kg)</label><input type="number" inputmode="decimal" step="0.05" id="dweight" placeholder="86,0" value="${te.weight??''}"></div>
     </div>
+    <button class="btn" id="wsave" style="margin-top:12px">Salvar peso</button>
+  </div>
+  <div class="card">
+    <h3>🍽️ Alimentação</h3>
     <div class="dgrid" style="margin-top:10px">
-      <div class="dfld"><label>Kcal total (do MyFitnessPal)</label><input type="number" inputmode="numeric" id="dkcal" placeholder="2500" value="${te.kcal??''}"></div>
-      <div class="dfld"><label>Proteína (g) — opcional</label><input type="number" inputmode="numeric" id="dprot" placeholder="${M.prot}" value="${te.prot??''}"></div>
+      <div class="dfld"><label>Data</label><input type="date" id="fdate" value="${today}" max="${today}" style="font-size:14px"></div>
+      <div class="dfld"><label>Kcal total (MyFitnessPal)</label><input type="number" inputmode="numeric" id="dkcal" placeholder="${fmt(tk.goal)}" value="${te.kcal??''}"></div>
     </div>
-    <label class="chkrow"><input type="checkbox" id="dinc" ${te.inc?'checked':''}> Dia incompleto (registro alimentar não confiável — fica fora do cálculo)</label>
-    <button class="btn" id="dsave" style="margin-top:12px">Salvar dia</button>
+    <div class="dgrid" style="margin-top:10px">
+      <div class="dfld"><label>Proteína (g) — opcional</label><input type="number" inputmode="numeric" id="dprot" placeholder="${M.prot}" value="${te.prot??''}"></div>
+      <div class="dfld"></div>
+    </div>
+    <label class="chkrow"><input type="checkbox" id="dinc" ${te.inc?'checked':''}> Dia incompleto (fica fora do cálculo do TDEE)</label>
+    <button class="btn" id="fsave" style="margin-top:12px">Salvar alimentação</button>
   </div>
   <div class="card">
     <h3>Painel</h3>
@@ -1238,28 +1246,34 @@ function renderDiet(){
     <button class="btn ghost" id="dexp" style="margin-top:12px">⬇ Exportar dieta (CSV / Excel)</button>
   </div>`;
   requestAnimationFrame(drawDietChart);
-  document.getElementById('ddate').onchange=ev=>{
-    const e=diet.entries[ev.target.value]||{};
-    document.getElementById('dweight').value=e.weight??'';
-    document.getElementById('dkcal').value=e.kcal??'';
-    document.getElementById('dprot').value=e.prot??'';
-    document.getElementById('dinc').checked=!!e.inc;
-  };
-  document.getElementById('dsave').onclick=async()=>{
-    const d=document.getElementById('ddate').value;
+  const loadW=d=>{const e=diet.entries[d]||{};document.getElementById('dweight').value=e.weight??''};
+  const loadF=d=>{const e=diet.entries[d]||{};document.getElementById('dkcal').value=e.kcal??'';document.getElementById('dprot').value=e.prot??'';document.getElementById('dinc').checked=!!e.inc};
+  document.getElementById('wdate').onchange=ev=>loadW(ev.target.value);
+  document.getElementById('fdate').onchange=ev=>loadF(ev.target.value);
+  document.getElementById('wsave').onclick=async()=>{
+    const d=document.getElementById('wdate').value;
     if(!d){toast('Escolha a data');return}
-    const w=numBR(document.getElementById('dweight').value), k=numBR(document.getElementById('dkcal').value), p=numBR(document.getElementById('dprot').value), inc=document.getElementById('dinc').checked;
-    if(w==null&&k==null){toast('Preencha peso e/ou kcal');return}
-    if(w!=null){
-      const tr0=computeTrend(), kk=Object.keys(tr0).sort();
-      if(kk.length){
-        const lt=tr0[kk[kk.length-1]];
-        if(Math.abs(w-lt)>2.5&&!confirm('Peso '+fmt(w)+' kg difere '+fmt(Math.abs(w-lt).toFixed(1))+' kg da tendência atual ('+fmt(lt.toFixed(1))+' kg). Salvar mesmo assim?'))return;
-      }
+    const w=numBR(document.getElementById('dweight').value);
+    if(w==null){toast('Preencha o peso');return}
+    const tr0=computeTrend(), kk=Object.keys(tr0).sort();
+    if(kk.length){
+      const lt=tr0[kk[kk.length-1]];
+      if(Math.abs(w-lt)>2.5&&!confirm('Peso '+fmt(w)+' kg difere '+fmt(Math.abs(w-lt).toFixed(1))+' kg da tendência atual ('+fmt(lt.toFixed(1))+' kg). Salvar mesmo assim?'))return;
     }
-    diet.entries[d]={weight:w,kcal:k,prot:p,inc};
+    const e=diet.entries[d]||{weight:null,kcal:null,prot:null,inc:false};
+    e.weight=w;diet.entries[d]=e;
     await saveDiet();await touchAndPush();
-    toast('✓ Dia salvo');renderDiet();
+    toast('✓ Peso salvo');renderDiet();
+  };
+  document.getElementById('fsave').onclick=async()=>{
+    const d=document.getElementById('fdate').value;
+    if(!d){toast('Escolha a data');return}
+    const k=numBR(document.getElementById('dkcal').value), p=numBR(document.getElementById('dprot').value), inc=document.getElementById('dinc').checked;
+    if(k==null&&p==null&&!inc){toast('Preencha as kcal');return}
+    const e=diet.entries[d]||{weight:null,kcal:null,prot:null,inc:false};
+    e.kcal=k;e.prot=p;e.inc=inc;diet.entries[d]=e;
+    await saveDiet();await touchAndPush();
+    toast('✓ Alimentação salva');renderDiet();
   };
   view.querySelectorAll('.modegrid button').forEach(b=>b.onclick=async()=>{diet.settings.mode=b.dataset.m;diet.settings.lastCoach=null;await saveDiet();await touchAndPush();renderDiet()});
   document.getElementById('dsetsave').onclick=async()=>{
