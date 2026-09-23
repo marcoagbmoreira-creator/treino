@@ -54,9 +54,13 @@ nav button.active{color:var(--accent)}
 /* set rows */
 .sethead,.setrow{display:grid;grid-template-columns:30px 1fr 1fr 1fr 44px;gap:8px;align-items:center}
 .lastline{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
-.linkrow{display:flex;flex-direction:column;gap:7px;padding:11px 0;border-bottom:1px solid var(--border);font-size:13.5px}
-.linkrow:last-of-type{border:none}
-.linkrow select{width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 13px inherit}
+.hevybar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 14px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.card .hevybar{margin:12px 0 0}
+.rotline{font-size:12.5px;color:var(--muted);margin-top:8px}
+.rotline b{color:var(--accent)}
+.rotline.ok{color:var(--up)}
+.hevybar .mini{white-space:nowrap;padding:6px 0}
+.fld select{width:100%;padding:10px 8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font:600 13px inherit}
 
 .sethead{font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;padding:0 2px}
 .setrow{margin-bottom:8px}
@@ -279,14 +283,24 @@ async function boot(){
   hevyKey=await sGet(K_HEVY)||'';
   hevyLast=await sGet(K_HSYNC)||'';
   if(ghToken&&gistId)await cloudPull();
-  if(!program.length){program=defaultProgram();await saveProgram()}
+  hevyFolders=await sGet(K_HFOLD)||[];
+  if(!program.length&&!hevyKey){program=defaultProgram();await saveProgram()}
   /* migração: exercícios sem tempo de descanso ganham um pela faixa de reps */
   for(const wo of program)for(const ex of wo.exercises){
     if(ex.rest==null)ex.rest=ex.repMin<=6?180:(ex.repMin<=8?150:(ex.repMin<=10?120:75));
   }
   selWorkout=program[0]?.id;
   render();
-  if(hevyKey)hevySync(false).then(r=>{if(r.n){toast('✓ '+r.n+' treino(s) importados do Hevy');render()}});
+  if(hevyKey){
+    const firstHv=!(await sGet(K_HV2));
+    if(firstHv)toast('Atualizando do Hevy…');
+    hevySync(false).then(r=>{
+      if(r.err){toast('⚠️ Hevy: '+r.err);if(tab==='train'||tab==='program')render();return}
+      if(r.changed&&['home','train','program','data'].includes(tab)){if(tab==='program')harvest();render()}
+      if(firstHv)toast('✓ Programa e histórico agora vêm do Hevy — '+r.shown+' rotina(s)');
+      else if(r.n)toast('✓ '+r.n+' treino(s) novo(s) do Hevy');
+    });
+  }
   if(memOnly)toast('⚠️ Sem armazenamento — dados só nesta sessão');
 }
 async function saveProgram(){await sSet(K_PROG,program)}
@@ -357,9 +371,18 @@ async function touchAndPush(){
 
 /* ============ progression algorithm ============ */
 /* Autoregulated Double Progression (Helms) + stall detection */
-function lastEntries(exId,n){
+/* mesmo exercício do Hevy em treinos com faixa de reps ou RIR diferentes (ex.: puxada 6-8 num dia e 10-12 no outro)
+   → cada treino usa só o próprio histórico; com o mesmo alvo, o histórico é compartilhado */
+function exScope(ex,wo){
+  if(!wo)return null;
+  for(const w2 of program)if(w2!==wo&&w2.exercises.some(e=>e.id===ex.id&&(e.repMin!==ex.repMin||e.repMax!==ex.repMax||e.rirMin!==ex.rirMin||e.rirMax!==ex.rirMax)))return wo;
+  return null;
+}
+function lastEntries(exId,n,wo){
   const out=[];
   for(let i=history.length-1;i>=0&&out.length<n;i--){
+    /* com escopo: sessões deste treino (pela rotina do Hevy ou, nas antigas, pelo nome do treino) */
+    if(wo&&history[i].workoutId!==wo.id&&history[i].workoutName!==wo.name)continue;
     const e=history[i].entries.find(x=>x.exId===exId);
     if(e&&e.sets.some(s=>s.w!=null||s.r!=null))out.push({date:history[i].date,sets:e.sets});
   }
@@ -385,13 +408,23 @@ function refAnalysis(sets,ex){
     ground:ev.some(s=>+s.r<ex.repMin&&s.rir!=null&&+s.rir===0)
   };
 }
-function suggest(ex){
-  const prev=lastEntries(ex.id,5);
-  const firstMsg={type:'first',w:null,label:'PRIMEIRA SESSÃO',msg:`Escolha uma carga que dê ${ex.repMin}–${ex.repMax} reps com RIR ${ex.rirMin}${ex.rirMax!==ex.rirMin?'–'+ex.rirMax:''}.`};
+function suggest(ex,wo){
+  const prev=lastEntries(ex.id,5,exScope(ex,wo));
+  const firstMsg=ex.planW
+    ?{type:'first',w:ex.planW,label:'PRIMEIRA SESSÃO',msg:`Comece com a carga da rotina do Hevy e busque ${fmtR(ex.repMin,ex.repMax)} reps com RIR ${fmtR(ex.rirMin,ex.rirMax)}.`}
+    :{type:'first',w:null,label:'PRIMEIRA SESSÃO',msg:`Escolha uma carga que dê ${fmtR(ex.repMin,ex.repMax)} reps com RIR ${fmtR(ex.rirMin,ex.rirMax)}.`};
   if(!prev.length)return firstMsg;
   const A=refAnalysis(prev[0].sets,ex);
   if(!A)return firstMsg;
   const w=A.ref;
+  const bw=w===0; /* sem carga registrada = peso corporal (ex.: elevação de pernas no Hevy) */
+  if(bw){
+    const lastTot=A.total, oldTot=prev.length>=3?refAnalysis(prev[2].sets,ex)?.total:null;
+    if(A.top)return{type:'up',w:null,label:'PROGRIDE',msg:'Faixa dominada com peso corporal — acrescente carga (anilha/colete) ou use uma variação mais difícil.'};
+    if(A.ground)return{type:'hold',w:null,label:'SEGURA',msg:'Reps abaixo da faixa com RIR 0 — use uma variação mais fácil até dominar a faixa.'};
+    if(oldTot!=null&&lastTot<=oldTot)return{type:'stall',w:null,label:'ESTAGNOU',msg:`3 sessões sem evolução de reps (${oldTot} → ${lastTot}). Desacelere a descida, acrescente carga ou troque a variação.`};
+    return{type:'keep',w:null,label:'MANTÉM — BUSCA REPS',msg:`Some reps até ${diet.settings.progMode==='flexivel'?'o total ficar a 1 do máximo':'todas as séries baterem '+ex.repMax}.`};
+  }
   if(A.top&&ex.inc>0)return{type:'up',w:round25(w+ex.inc),label:'SOBE CARGA',msg:`Faixa dominada nas séries de trabalho (${fmt(w)} kg) → sobe para ${fmt(round25(w+ex.inc))} kg.`};
   if(A.top)return{type:'up',w,label:'PROGRIDE',msg:'Faixa dominada — adicione 1 rep acima do topo ou reduza o RIR.'};
   /* estagnação: 3+ sessões na mesma carga de referência, sem topo E sem evolução no total de reps */
@@ -410,6 +443,7 @@ function suggest(ex){
 }
 const round25=v=>Math.round(v/0.25)*0.25;
 const fmt=v=>(+v).toLocaleString('pt-BR',{maximumFractionDigits:2});
+const fmtR=(a,b)=>fmt(a)+(b!=null&&+b!==+a?'–'+fmt(b):''); /* faixa: "8–10", "1,5–2" ou "2" */
 
 /* ============ render ============ */
 const view=document.getElementById('view');
@@ -558,75 +592,53 @@ function drawTonnage(){
 
 /* ---- TRAIN ---- */
 function renderTrain(){
-  if(!program.length){view.innerHTML='<div class="empty">Nenhum treino no programa. Crie um na aba Programa.</div>';return}
+  if(!program.length){
+    view.innerHTML=hevyKey
+      ?hevyBar()+'<div class="empty">Nenhuma rotina do Hevy'+(diet.settings.hevyFolder!=null?' nesta pasta':'')+' ainda.<br>Monte seus treinos no Hevy (Treino → Rotinas) e toque em ↻ Atualizar.</div>'
+      :'<div class="empty">Nenhum treino no programa. Crie um na aba Programa.</div>';
+    bindHevyBar();
+    return;
+  }
   if(!program.find(w=>w.id===selWorkout))selWorkout=program[0].id;
   const wo=program.find(w=>w.id===selWorkout);
   const dlRef=diet.settings.lastDeload||(history.length?dISO(new Date(history[0].date)):null);
   const dlWks=dlRef?Math.floor((Date.now()-new Date(dlRef).getTime())/6048e5):0;
   let bn='';
   if(dlRef&&dlWks>=6)bn=`<div class="decide stall" style="margin-bottom:14px"><b>DELOAD SUGERIDO</b><span style="font-size:12.5px;color:var(--muted)">${dlWks} semanas sem deload — faça uma semana com metade das séries e cargas ~15% menores. <button class="mini up2" id="deloaddone" style="padding:0 4px;text-decoration:underline">marcar como feito</button></span></div>`;
-  let h=bn+`<div class="chips">${program.map(w=>`<button class="chip ${w.id===selWorkout?'sel':''}" data-wo="${w.id}">${esc(w.name)}</button>`).join('')}</div>`;
+  let h=hevyBar()+bn+`<div class="chips">${program.map(w=>`<button class="chip ${w.id===selWorkout?'sel':''}" data-wo="${w.id}">${esc(w.name)}</button>`).join('')}</div>`;
   h+=wo.exercises.map(ex=>{
-    const sg=suggest(ex);
-    const prev=lastEntries(ex.id,1)[0];
+    const sg=suggest(ex,wo);
+    const prev=lastEntries(ex.id,1,exScope(ex,wo))[0];
     let lastLine='';
     if(prev){
-      const v=prev.sets.filter(s=>s.r!=null);
-      const wmax=Math.max(...v.map(s=>+s.w||0));
-      const reps=v.map(s=>s.r).join('/');
-      const rirs=v.filter(s=>s.rir!=null).map(s=>s.rir).join('/');
-      lastLine=`<div class="lastline">Última (${new Date(prev.date).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}): ${fmt(wmax)} kg × ${reps}${rirs?' · RIR '+rirs:''}</div>`;
+      /* mesmas séries que a decisão usa (carga de referência); drop/back-off só contados */
+      const ref=aiReferenceSets(prev.sets);
+      const extra=prev.sets.filter(s=>s.r!=null&&s.r!=='').length-ref.sets.length;
+      const reps=ref.sets.map(s=>s.r).join('/');
+      const rirs=ref.sets.filter(s=>s.rir!=null&&s.rir!=='').map(s=>fmt(s.rir)).join('/');
+      lastLine=`<div class="lastline">Última (${new Date(prev.date).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}): ${ref.weight?fmt(ref.weight)+' kg':'peso corporal'} × ${reps}${rirs?' · RIR '+rirs:''}${extra>0?' · +'+extra+' drop/back-off':''}</div>`;
     }
+    const bwEx=!ex.planW&&(!prev||!prev.sets.some(s=>+s.w>0));
+    /* carga que está na rotina do Hevy × decisão do app: avisa quando a rotina precisa ser atualizada lá */
+    let rot='';
+    if(ex.planW&&sg.w!=null&&sg.type!=='first')rot=Math.abs(sg.w-ex.planW)<0.01
+      ?`<div class="rotline ok">📋 Rotina no Hevy já está em ${fmt(ex.planW)} kg ✓</div>`
+      :`<div class="rotline">📋 Rotina no Hevy: ${fmt(ex.planW)} kg → ajuste para <b>${fmt(sg.w)} kg</b></div>`;
     return `<div class="card">
       <h3>${esc(ex.name)}</h3>
-      <div class="sub">${ex.sets} × ${ex.repMin}–${ex.repMax} reps · RIR ${ex.rirMin}${ex.rirMax!==ex.rirMin?'–'+ex.rirMax:''} · +${fmt(ex.inc)} kg</div>
+      <div class="sub">${ex.sets} × ${fmtR(ex.repMin,ex.repMax)} reps · RIR ${fmtR(ex.rirMin,ex.rirMax)}${ex.inc>0&&!bwEx?' · +'+fmt(ex.inc)+' kg':''}</div>
       <div class="decide ${sg.type}"><b>${sg.label}${sg.w!=null?' · '+fmt(sg.w)+' kg':''}</b></div>
       <div class="note" style="margin:-4px 0 0;font-size:12.5px">${sg.msg}</div>
+      ${rot}
       ${lastLine}
     </div>`;
   }).join('');
-  const un=unmatchedHevy();
-  if(un.length){
-    const opts='<option value="">— escolher —</option>'+program.map(w2=>w2.exercises.map(ex=>`<option value="${ex.id}">${esc(w2.name)}: ${esc(ex.name)}</option>`).join('')).join('');
-    h+=`<div class="card"><h3>🔗 Exercícios do Hevy sem vínculo</h3>
-      <p class="note" style="margin:8px 0 4px">Vincule cada um ao exercício correspondente do programa — o histórico passa a alimentar a progressão e importações futuras já chegam conectadas.</p>
-      ${un.map(u=>`<div class="linkrow"><span>${esc(u.name)} <span class="tag">${u.count}× no histórico</span></span><select data-link="${esc(u.exId)}">${opts}</select></div>`).join('')}
-      <button class="btn ghost" id="dolink" style="margin-top:12px">Vincular selecionados</button>
-    </div>`;
-  }
   view.innerHTML=h;
+  bindHevyBar();
   view.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{selWorkout=c.dataset.wo;render()});
   const dl=document.getElementById('deloaddone');
   if(dl)dl.onclick=async()=>{diet.settings.lastDeload=todayISO();await saveDiet();await touchAndPush();toast('✓ Deload registrado');render()};
   view.querySelectorAll('.setrow input').forEach(i=>i.addEventListener('input',()=>i.classList.toggle('done',i.value!=='')));
-  const dlk=document.getElementById('dolink');
-  if(dlk)dlk.onclick=async()=>{
-    let n=0;
-    for(const sel of view.querySelectorAll('select[data-link]')){
-      if(sel.value){await linkHevy(sel.dataset.link,sel.value);n++}
-    }
-    if(!n){toast('Escolha ao menos um vínculo');return}
-    toast('✓ '+n+' exercício(s) vinculados');
-    render();
-  };
-}
-async function linkHevy(hevyExId,progExId){
-  let target=null;
-  for(const wo of program){const ex=wo.exercises.find(x=>x.id===progExId);if(ex){target=ex;break}}
-  if(!target)return;
-  target.hevyId=String(hevyExId).replace(/^hevy_/,'');
-  for(const s of history)for(const e of s.entries)if(e.exId===hevyExId){e.exId=target.id;e.exName=target.name}
-  await saveHistory();await saveProgram();await touchAndPush();
-}
-function unmatchedHevy(){
-  const m={};
-  for(const s of history)for(const e of s.entries){
-    if(String(e.exId).startsWith('hevy_')){
-      if(!m[e.exId])m[e.exId]={exId:e.exId,name:e.exName,count:0};
-      m[e.exId].count++;
-    }
-  }
-  return Object.values(m).sort((a,b)=>b.count-a.count);
 }
 
 /* ---- PROGRAM (editable) ---- */
@@ -640,6 +652,7 @@ function renderProgram(){
     </div>
     <p class="note" style="font-size:12.5px"><b>Conservador:</b> sobe carga só quando todas as séries de trabalho batem o topo da faixa. <b>Flexível:</b> sobe quando o total de reps fica a 1 do máximo (ex.: 10/10/9 em 3×8-10 já progride). Ambos exigem RIR dentro do alvo.</p>
   </div>`;
+  if(hevyKey)return renderProgramHevy(h);
   h+=program.map((wo,wi)=>`<div class="card">
     <div class="exhead">
       <input type="text" value="${esc(wo.name)}" data-wname="${wo.id}" style="background:none;border:none;color:var(--text);font:800 17px inherit;width:60%">
@@ -664,21 +677,11 @@ function renderProgram(){
       </div>
     </div>`).join('')}
   </div>`).join('');
-  h+=`${hevyKey?`<button class="btn ghost" id="impRoutines">⬇ Importar rotinas do Hevy</button>`:`<p class="note" style="margin:6px 0">Para importar suas rotinas direto do Hevy, configure a chave da API na aba Dados.</p>`}
+  h+=`<p class="note" style="margin:6px 0">Quer montar o treino no Hevy? Configure a chave da API na aba Dados — as rotinas de lá passam a ser o programa.</p>
       <button class="btn ghost" id="addwo" style="margin-top:10px">+ Adicionar treino</button>
-      <button class="btn" id="saveprog" style="margin-top:10px">Salvar programa</button>
-      <p class="note" style="margin-top:12px">A importação do Hevy atualiza nomes, séries, faixas de reps e a ordem — e <b>preserva</b> o RIR, o incremento e o histórico dos exercícios já vinculados, mesmo que mudem de treino (ex.: migração Upper/Lower → PPL). Exercícios novos entram com RIR 1-2 e incremento automático para você refinar.</p>`;
+      <button class="btn" id="saveprog" style="margin-top:10px">Salvar programa</button>`;
   view.innerHTML=h;
-  view.querySelectorAll('[data-pm]').forEach(b=>b.onclick=async()=>{diet.settings.progMode=b.dataset.pm;await saveDiet();await touchAndPush();toast('✓ Modo '+b.dataset.pm);renderProgram()});
-  const ir=document.getElementById('impRoutines');
-  if(ir)ir.onclick=async()=>{
-    harvest();
-    toast('Importando rotinas…');
-    const r=await hevyImportRoutines();
-    if(r.err){toast('⚠️ '+r.err);return}
-    toast(`✓ ${r.created} novo(s), ${r.updated} atualizado(s), ${r.moved} movido(s), ${r.newEx} exercício(s) novos`);
-    renderProgram();
-  };
+  bindProgMode();
   document.getElementById('addwo').onclick=()=>{program.push({id:uid(),name:'Novo treino',exercises:[]});renderProgram()};
   document.getElementById('saveprog').onclick=async()=>{harvest();await saveProgram();await touchAndPush();toast('✓ Programa salvo');};
   view.querySelectorAll('[data-addex]').forEach(b=>b.onclick=()=>{harvest();const wo=program.find(w=>w.id===b.dataset.addex);wo.exercises.push({id:uid(),name:'Novo exercício',sets:3,repMin:8,repMax:10,rirMin:1,rirMax:2,inc:2.5});renderProgram()});
@@ -688,7 +691,77 @@ function renderProgram(){
   view.querySelectorAll('[data-mvup]').forEach(b=>b.onclick=()=>{const[w,e]=b.dataset.mvup.split('|');mv(w,e,-1)});
   view.querySelectorAll('[data-mvdn]').forEach(b=>b.onclick=()=>{const[w,e]=b.dataset.mvdn.split('|');mv(w,e,1)});
 }
+function bindProgMode(){
+  view.querySelectorAll('[data-pm]').forEach(b=>b.onclick=async()=>{harvest();diet.settings.progMode=b.dataset.pm;await saveDiet();await touchAndPush();toast('✓ Modo '+b.dataset.pm);renderProgram()});
+}
+/* programa vindo do Hevy: estrutura, carga e RPE só leitura (edita-se no Hevy); aqui só o incremento
+   (e o RIR, apenas quando a rotina não tem RPE) */
+function renderProgramHevy(h){
+  const sel=diet.settings.hevyFolder;
+  h+=`<div class="card">
+    <h3>Programa = suas rotinas do Hevy</h3>
+    <p class="note" style="margin:8px 0 10px">Exercícios, séries, faixa de reps, carga, RPE e descanso vêm das <b>rotinas do Hevy</b> — para mudar o treino, edite lá. O <b>RPE da rotina vira o RIR alvo</b> (RIR = 10 − RPE). Aqui fica só o <b>incremento</b> de carga de cada exercício, que o Hevy não tem.</p>
+    ${hevyFolders.length>1?`<div class="fld"><label>Pasta do Hevy</label><select id="hvfolder"><option value="">Todas as rotinas</option>${hevyFolders.map(f=>`<option value="${esc(f.id)}"${sel!=null&&String(sel)===String(f.id)?' selected':''}>${esc(f.title||'Sem nome')}</option>`).join('')}</select></div>`:''}
+    ${hevyBar()}
+  </div>`;
+  if(!program.length)h+=`<div class="empty">Nenhuma rotina ${sel!=null?'nesta pasta':'no Hevy'} ainda. Monte seus treinos no Hevy e toque em ↻ Atualizar.</div>`;
+  const seen={};
+  h+=program.map(wo=>`<div class="card">
+    <h3>${esc(wo.name)}</h3>
+    ${wo.exercises.map(ex=>{
+      const dup=seen[ex.id];
+      if(!dup)seen[ex.id]=wo.name;
+      const fixed=ex.repMin===ex.repMax;
+      const rirTxt='RIR '+fmtR(ex.rirMin,ex.rirMax)+(ex.rirFromHevy?' (RPE '+fmtR(10-ex.rirMax,10-ex.rirMin)+')':'');
+      const rirIn=ex.rirFromHevy?'':`<div class="fld"><label>RIR mín</label><input type="number" step="0.5" value="${ex.rirMin}" data-e="rirMin"></div>
+          <div class="fld"><label>RIR máx</label><input type="number" step="0.5" value="${ex.rirMax}" data-e="rirMax"></div>`;
+      const incIn=dup?'':`<div class="fld"><label>Incr. kg</label><input type="number" step="0.25" value="${ex.inc}" data-e="inc"></div>`;
+      return `<div class="exedit" data-exid="${esc(ex.id)}" data-wid="${esc(wo.id)}">
+        <div style="font-weight:700;font-size:14px">${esc(ex.name)}</div>
+        <div class="sub">${ex.sets} × ${fmtR(ex.repMin,ex.repMax)} reps${ex.planW?' · '+fmt(ex.planW)+' kg':''} · ${rirTxt} · descanso ${ex.rest} s</div>
+        ${fixed?`<p class="note" style="font-size:12px;margin:6px 0 0">Reps fixas no Hevy — para a dupla progressão, use uma faixa na rotina (ex.: ${ex.repMin}–${ex.repMin+2}).</p>`:''}
+        ${ex.rirFromHevy?'':`<p class="note" style="font-size:12px;margin:6px 0 0">Esta rotina não tem RPE no Hevy — coloque lá (RPE 8 = RIR 2) ou ajuste o RIR aqui.</p>`}
+        ${dup?`<p class="note" style="font-size:12px;margin:6px 0 0">Incremento: o mesmo de <b>${esc(dup)}</b>.</p>`:''}
+        ${rirIn||incIn?`<div class="grid6" style="margin-top:8px">${rirIn}${incIn}</div>`:''}
+      </div>`;
+    }).join('')}
+  </div>`).join('');
+  if(program.length)h+=`<button class="btn" id="saveprog" style="margin-top:4px">Salvar ajustes</button>`;
+  view.innerHTML=h;
+  bindProgMode();
+  bindHevyBar();
+  const fs=document.getElementById('hvfolder');
+  if(fs)fs.onchange=async()=>{
+    harvest();
+    diet.settings.hevyFolder=fs.value===''?null:Number(fs.value);
+    await saveDiet();
+    toast('Atualizando rotinas…');
+    const r=await hevySync(false);
+    if(r.err)toast('⚠️ Hevy: '+r.err);
+    else await touchAndPush();
+    renderProgram();
+  };
+  const sp=document.getElementById('saveprog');
+  if(sp)sp.onclick=async()=>{harvest();await saveProgram();await touchAndPush();toast('✓ Ajustes salvos')};
+}
 function harvest(){ /* read edits from DOM into state */
+  if(hevyKey){
+    /* modo Hevy: incremento vale para todas as ocorrências do exercício; RIR só onde a rotina não tem RPE */
+    view.querySelectorAll('.exedit').forEach(box=>{
+      const vals={};
+      box.querySelectorAll('[data-e]').forEach(inp=>{const v=numBR(inp.value);if(v!=null)vals[inp.dataset.e]=v});
+      if(!Object.keys(vals).length)return;
+      for(const wo of program)for(const ex of wo.exercises)if(ex.id===box.dataset.exid){
+        if(vals.inc!=null)ex.inc=Math.max(0,vals.inc);
+        if(wo.id===box.dataset.wid&&!ex.rirFromHevy){
+          if(vals.rirMin!=null)ex.rirMin=Math.max(0,vals.rirMin);
+          if(vals.rirMax!=null)ex.rirMax=Math.max(0,vals.rirMax);
+          if(ex.rirMax<ex.rirMin)ex.rirMax=ex.rirMin;
+        }
+      }
+    });
+    return;
+  }
   view.querySelectorAll('[data-wname]').forEach(i=>{const wo=program.find(w=>w.id===i.dataset.wname);if(wo)wo.name=i.value.trim()||wo.name});
   view.querySelectorAll('.exedit').forEach(box=>{
     const id=box.dataset.exid;
@@ -728,17 +801,19 @@ function renderData(){
     ${gistId?`<p class="note" style="margin-top:6px;font-size:11px;color:var(--faint)">Gist: <span class="tag">${esc(gistId)}</span></p>`:''}
   </div>
   <div class="card">
-    <h3>🔗 Hevy — treine lá, progrida aqui</h3>
-    <p class="note" style="margin:8px 0 12px">Registre os treinos no app do <b>Hevy</b>; este app importa automaticamente e roda o algoritmo de progressão em cima (a decisão de carga aparece na aba Treinar como sempre). A cada abertura, os treinos novos são puxados sozinhos. Requer <b>Hevy Pro</b> — chave em hevy.com/settings → Developer.</p>
+    <h3>🔗 Hevy — monte e treine lá, progrida aqui</h3>
+    <p class="note" style="margin:8px 0 12px">Monte os treinos como <b>rotinas no Hevy</b> e registre as sessões lá. O app puxa as rotinas como programa e os treinos como histórico — cada exercício é reconhecido pelo próprio código do Hevy, sem vincular nada. Atualiza sozinho a cada abertura. Requer <b>Hevy Pro</b> — chave em hevy.com/settings → Developer.</p>
     <details ${hevyKey?'':'open'}>
       <summary>${hevyKey?'Chave configurada — alterar':'Configurar chave do Hevy'}</summary>
-      <input type="text" id="hevykey" placeholder="chave da API do Hevy" value="${esc(hevyKey||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono);margin-top:8px">
+      <input type="password" id="hevykey" placeholder="chave da API do Hevy" value="${esc(hevyKey||'')}" autocomplete="off" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono);margin-top:8px">
       <button class="btn ghost" id="hevysave" style="margin-top:10px">Salvar chave</button>
     </details>
-    ${hevyKey?`<button class="btn ghost" id="hevyimp" style="margin-top:10px">Importar todo o histórico agora</button>
-    <button class="btn danger" id="hevyreset" style="margin-top:10px">Refazer vínculos e reimportar do zero</button>`:''}
-    ${hevyLast?`<p class="note" style="margin-top:8px;font-family:var(--mono);font-size:12px">Última importação: ${new Date(hevyLast).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>`:''}
-    <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Dica: registre o <b>RPE</b> nas séries do Hevy (RIR = 10 − RPE) para o algoritmo decidir com precisão. Sem RPE, ele assume que o RIR alvo foi respeitado. Séries de aquecimento são ignoradas.</p>
+    ${hevyKey?`<div class="row2" style="margin-top:10px">
+      <button class="btn ghost" id="hevyimp">↻ Atualizar agora</button>
+      <button class="btn ghost" id="hevyfull">Reimportar tudo</button>
+    </div>`:''}
+    ${hevyKey?`<p class="note" style="margin-top:8px;font-family:var(--mono);font-size:12px">${hevyErr?'⚠️ Última tentativa falhou: '+esc(hevyErr):'Última atualização: '+(hevyLast?new Date(hevyLast).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—')}</p>`:''}
+    <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">O <b>RPE da rotina</b> vira o RIR alvo e o <b>RPE registrado no treino</b> é comparado com ele (RIR = 10 − RPE). Sem RPE no treino, o app assume que o alvo foi respeitado. Séries de aquecimento são ignoradas. A carga da rotina aparece na aba Progressão com o aviso de quando atualizá-la no Hevy — o app não grava na rotina porque a API do Hevy apagaria o RPE dela.</p>
   </div>
   <div class="card">
     <h3>Exportar / Importar</h3>
@@ -780,32 +855,25 @@ function renderData(){
   if(hvs)hvs.onclick=async()=>{
     hevyKey=document.getElementById('hevykey').value.trim();
     await sSet(K_HEVY,hevyKey);
-    if(!hevyKey){toast('Chave removida');renderData();return}
-    toast('Testando conexão…');
-    const r=await hevySync(false);
+    if(!hevyKey){hevyErr='';toast('Chave removida');renderData();return}
+    toast('Conectando ao Hevy…');
+    const r=await hevySync(true);
     if(r.err)toast('⚠️ Falha: '+r.err);
-    else toast(r.n?'✓ Conectado — '+r.n+' treino(s) novos':'✓ Conectado — nada novo');
+    else toast('✓ Conectado — '+r.shown+' rotina(s) e '+r.total+' treino(s) do Hevy');
     renderData();
   };
   const hvi=document.getElementById('hevyimp');
   if(hvi)hvi.onclick=async()=>{
-    toast('Importando histórico completo…');
-    const r=await hevySync(true);
-    if(r.err)toast('⚠️ Falha ('+r.err+') — '+r.n+' importados antes do erro');
-    else toast('✓ '+r.n+' treino(s) importados');
+    toast('Atualizando do Hevy…');
+    const r=await hevySync(false);
+    toast(r.err?'⚠️ Falha: '+r.err:(r.n?'✓ '+r.n+' treino(s) novo(s)':'✓ Tudo em dia'));
     renderData();
   };
-  const hvr=document.getElementById('hevyreset');
-  if(hvr)hvr.onclick=async()=>{
-    if(!confirm('Refazer vínculos: limpa TODOS os vínculos exercício↔Hevy, remove os treinos importados e reimporta tudo do zero com o casamento corrigido. Sessões registradas manualmente são preservadas. Continuar?'))return;
-    for(const wo of program)for(const ex of wo.exercises)delete ex.hevyId;
-    history=history.filter(h=>!h.hevyId);
-    await saveProgram();await saveHistory();
-    toast('Reimportando do zero…');
+  const hvf=document.getElementById('hevyfull');
+  if(hvf)hvf.onclick=async()=>{
+    toast('Reimportando tudo do Hevy…');
     const r=await hevySync(true);
-    if(r.err)toast('⚠️ '+r.err+' — '+r.n+' reimportados');
-    else toast('✓ '+r.n+' treino(s) reimportados');
-    await touchAndPush();
+    toast(r.err?'⚠️ Falha: '+r.err:'✓ '+r.shown+' rotina(s) e '+r.total+' treino(s) do Hevy');
     renderData();
   };
   const ghs=document.getElementById('ghsave');
@@ -931,15 +999,23 @@ function download(name,content,type){
 
 /* ============ AI analysis (Gemini) ============ */
 let lastAI=null, aiBusy=false;
+const GEMINI_BASE='https://generativelanguage.googleapis.com/v1beta/models/';
 const GEMINI_DEFAULT_MODEL='gemini-3.8-flash';
 const GEMINI_FALLBACK_MODELS=['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash'];
-const AI_TIMEOUT_MS=90000;
-const AI_MAX_TOKENS=8192; /* inclui os tokens de raciocínio do modelo — com limite baixo a resposta volta cortada ou vazia */
+const AI_THINKING='low'; /* raciocínio curto: no padrão (medium) a análise completa passava de 90 s */
+const AI_MAX_TOKENS=8192; /* inclui os tokens de raciocínio — com limite baixo a resposta volta cortada ou vazia */
+const AI_FIRST_MS=45000, AI_IDLE_MS=30000, AI_TOTAL_MS=180000; /* até o 1º trecho de texto · pausa máxima entre trechos · teto por modelo */
 function normalizeGeminiModel(model){
   return String(model||'').trim().replace(/^models\//,'')||GEMINI_DEFAULT_MODEL;
 }
 function geminiModelCandidates(){
   return [...new Set([normalizeGeminiModel(aiModel),...GEMINI_FALLBACK_MODELS])];
+}
+function geminiGenConfig(model){
+  const g={maxOutputTokens:AI_MAX_TOKENS}; /* sem temperature: os modelos 3.x pedem o padrão */
+  if(/^gemini-3/.test(model))g.thinkingConfig={thinkingLevel:AI_THINKING};
+  else if(/^gemini-2\.5/.test(model))g.thinkingConfig={thinkingBudget:1024};
+  return g;
 }
 /* mesma regra do refAnalysis: carga de referência = moda das séries com reps (empate → maior);
    peso em branco conta como 0 (peso corporal); back-offs/drops ficam fora */
@@ -972,7 +1048,7 @@ function renderAI(){
       <p class="note" style="margin:8px 0 10px">Crie uma chave gratuita em <b>aistudio.google.com</b> → "Get API key", cole aqui e toque em <b>Testar conexão</b>. A chave fica guardada só neste aparelho.</p>
       <input type="password" id="aikey" placeholder="Chave da Gemini API" value="${esc(apiKey||'')}" autocomplete="off" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
       <div class="fld" style="margin-top:10px"><label>Modelo</label><input type="text" id="aimodel" value="${esc(normalizeGeminiModel(aiModel))}" style="text-align:left;font-size:13px;padding:10px"></div>
-      <p class="note" style="margin-top:7px;font-size:11.5px;color:var(--faint)">Padrão: ${GEMINI_DEFAULT_MODEL}. Se o modelo não existir mais, ou estiver sem cota/sobrecarregado, o app tenta ${GEMINI_FALLBACK_MODELS.join(' → ')}.</p>
+      <p class="note" style="margin-top:7px;font-size:11.5px;color:var(--faint)">Padrão: ${GEMINI_DEFAULT_MODEL}. Se o modelo não existir mais, estiver sem cota ou não começar a responder em ${AI_FIRST_MS/1000} s, o app tenta ${GEMINI_FALLBACK_MODELS.join(' → ')}.</p>
       <div class="row2" style="margin-top:10px">
         <button class="btn ghost" id="aikeysave">Salvar</button>
         <button class="btn ghost" id="aitest">Testar conexão</button>
@@ -995,15 +1071,17 @@ function renderAI(){
     if(aiBusy)return;
     aiBusy=true;
     const target=document.getElementById('aires');
-    target.innerHTML='<div class="card"><div class="note"><span class="spin"></span>Testando conexão com o Gemini…</div></div>';
+    const w=aiWaiting(target,'Testando conexão');
     try{
       const before=aiModel;
-      const res=await geminiGenerateWithFallback('Teste técnico de conexão.','Responda somente com a palavra OK.');
+      const res=await geminiGenerateWithFallback('Teste técnico de conexão.','Responda somente com a palavra OK.',{onModel:w.setModel});
+      w.stop();
       await adoptModel(res);
-      target.innerHTML='<div class="card"><div class="note"><b>✓ Gemini conectado.</b><br><br>Modelo que respondeu: <span class="tag">'+esc(res.model)+'</span>'+(modelNote(before,res)?'<br><br>'+modelNote(before,res):'')+'</div></div>';
+      const note=modelNote(before,res);
+      target.innerHTML='<div class="card"><div class="note"><b>✓ Gemini conectado</b> em '+w.secs()+' s.<br><br>Modelo que respondeu: <span class="tag">'+esc(res.model)+'</span>'+(note?'<br><br>'+note:'')+'</div></div>';
       toast('✓ Conexão funcionando');
-    }catch(e){showGeminiError(target,e)}
-    finally{aiBusy=false}
+    }catch(e){w.stop();showGeminiError(target,e)}
+    finally{w.stop();aiBusy=false}
   };
   document.getElementById('aikeyclear').onclick=async()=>{apiKey='';await sSet(K_KEY,'');renderAI();toast('Chave removida')};
 }
@@ -1013,16 +1091,16 @@ function buildContext(){
   for(const wo of program){
     lines.push('\nTreino '+wo.name+':');
     for(const ex of wo.exercises){
-      const prev=lastEntries(ex.id,8).reverse();
+      const prev=lastEntries(ex.id,8,exScope(ex,wo)).reverse();
       const hist=prev.map(p=>{
         const d=new Date(p.date).toLocaleDateString('pt-BR').slice(0,5);
         const ref=aiReferenceSets(p.sets);
         if(!ref.sets.length)return d+': sem séries válidas';
         const reps=ref.sets.map(s=>s.r).join('/');
-        const rirs=ref.sets.filter(s=>s.rir!=null&&s.rir!=='').map(s=>s.rir).join('/');
+        const rirs=ref.sets.filter(s=>s.rir!=null&&s.rir!=='').map(s=>fmt(s.rir)).join('/');
         return d+': '+(ref.weight?fmt(ref.weight)+'kg':'peso corporal')+'×'+reps+' (RIR '+(rirs||'?')+')';
       }).join(' | ');
-      lines.push('- '+ex.name+' [alvo '+ex.sets+'×'+ex.repMin+'-'+ex.repMax+' RIR '+ex.rirMin+'-'+ex.rirMax+']: '+(hist||'sem registros ainda'));
+      lines.push('- '+ex.name+' [alvo '+ex.sets+'×'+fmtR(ex.repMin,ex.repMax)+' RIR '+fmtR(ex.rirMin,ex.rirMax)+(ex.planW?', carga na rotina '+fmt(ex.planW)+' kg':'')+']: '+(hist||'sem registros ainda'));
     }
   }
   const t=computeTDEE(), wr=weeklyRate(), tk=targetKcal(), tr=computeTrend();
@@ -1038,44 +1116,65 @@ function buildContext(){
   lines.push('\nTotal de sessões registradas: '+history.length+(dates.length?' | Últimas datas: '+dates.slice(-12).join(', '):''));
   return lines.join('\n');
 }
-/* uma chamada ao endpoint REST generateContent (chave no header, não na URL) */
-async function geminiGenerate(model,systemText,userText){
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),AI_TIMEOUT_MS);
+function geminiHttpError(status,detail,model){
+  const err=new Error('HTTP '+status+' — '+detail);
+  err.status=status;err.detail=detail;err.model=model;
+  return err;
+}
+/* uma chamada em streaming (streamGenerateContent + SSE): o texto chega em trechos enquanto é escrito,
+   então o app mostra a resposta aos poucos e só desiste se o modelo não começar ou travar no meio */
+async function geminiGenerate(model,systemText,userText,onText){
+  const ctl=new AbortController();
+  let why=null, idle=null, text='', finish='';
+  const arm=(ms,kind)=>{clearTimeout(idle);idle=setTimeout(()=>{why=kind;ctl.abort()},ms)};
+  const total=setTimeout(()=>{why='total';ctl.abort()},AI_TOTAL_MS);
+  arm(AI_FIRST_MS,'first');
   try{
-    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
+    const r=await fetch(GEMINI_BASE+encodeURIComponent(model)+':streamGenerateContent?alt=sse',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
       cache:'no-store',
-      signal:controller.signal,
+      signal:ctl.signal,
       body:JSON.stringify({
         system_instruction:{parts:[{text:systemText}]},
         contents:[{role:'user',parts:[{text:userText}]}],
-        generationConfig:{maxOutputTokens:AI_MAX_TOKENS} /* sem temperature: os modelos 3.x pedem o padrão */
+        generationConfig:geminiGenConfig(model)
       })
     });
-    const raw=await r.text(); /* lê como texto para não perder a mensagem de erro */
-    let data={};
-    try{data=raw?JSON.parse(raw):{}}catch(_){}
     if(!r.ok){
-      const detail=data?.error?.message||raw||r.statusText||'erro desconhecido';
-      const err=new Error('HTTP '+r.status+' — '+detail);
-      err.status=r.status;err.detail=detail;err.model=model;
-      throw err;
+      const raw=await r.text(); /* lê como texto para não perder a mensagem de erro */
+      let data={};
+      try{data=raw?JSON.parse(raw):{}}catch(_){}
+      if(Array.isArray(data))data=data[0]||{};
+      throw geminiHttpError(r.status,data?.error?.message||raw||r.statusText||'erro desconhecido',model);
     }
-    const cand=data.candidates?.[0];
-    const text=(cand?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('').trim();
-    const finish=cand?.finishReason||data.promptFeedback?.blockReason||'desconhecido';
-    if(!text){
-      const err=new Error('O Gemini respondeu sem texto (motivo: '+finish+').');
-      err.status=200;err.finish=finish;err.model=model;
-      throw err;
+    const reader=r.body.getReader(), dec=new TextDecoder();
+    let buf='';
+    for(;;){
+      const{value,done}=await reader.read();
+      if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      let nl;
+      while((nl=buf.indexOf('\n'))>=0){
+        const line=buf.slice(0,nl).trim();
+        buf=buf.slice(nl+1);
+        if(!line.startsWith('data:'))continue;
+        let d;
+        try{d=JSON.parse(line.slice(5))}catch(_){continue}
+        if(d.error)throw geminiHttpError(d.error.code||500,d.error.message||'erro no meio da resposta',model);
+        const c=d.candidates?.[0];
+        const t=(c?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('');
+        if(t){text+=t;arm(AI_IDLE_MS,'idle');if(onText)onText(text,model)}
+        if(c?.finishReason)finish=c.finishReason;
+        else if(!c&&d.promptFeedback?.blockReason)finish=d.promptFeedback.blockReason;
+      }
     }
-    return{text,model,truncated:finish==='MAX_TOKENS'};
   }catch(e){
+    /* se já chegou parte do texto, entrega o que veio em vez de perder tudo */
+    if(text.trim())return{text:text.trim(),model,truncated:true,interrupted:true};
     if(e?.name==='AbortError'){
-      const err=new Error('Sem resposta em '+(AI_TIMEOUT_MS/1000)+' s.');
-      err.network=true;err.timeout=true;
+      const err=new Error(why==='first'?'Nenhum trecho de resposta em '+(AI_FIRST_MS/1000)+' s.':'Sem resposta em '+(AI_TOTAL_MS/1000)+' s.');
+      err.timeout=why||'total';err.model=model;
       throw err;
     }
     /* o Safari devolve só "Load failed" quando a conexão não se completa */
@@ -1086,18 +1185,26 @@ async function geminiGenerate(model,systemText,userText){
     }
     throw e;
   }finally{
-    clearTimeout(timer);
+    clearTimeout(idle);clearTimeout(total);
   }
+  text=text.trim();
+  if(!text){
+    const err=new Error('O Gemini respondeu sem texto (motivo: '+(finish||'desconhecido')+').');
+    err.status=200;err.finish=finish;err.model=model;
+    throw err;
+  }
+  return{text,model,truncated:finish==='MAX_TOKENS'};
 }
-/* tenta o modelo configurado e, se ele não existir mais ou estiver sem cota/sobrecarregado, os seguintes.
-   Chave inválida, permissão, rede e tempo esgotado não são mascarados: outro modelo não resolveria. */
-async function geminiGenerateWithFallback(systemText,userText){
+/* tenta o modelo configurado e, se ele não existir mais, estiver sem cota/sobrecarregado ou não começar a responder, os seguintes.
+   Chave inválida, permissão e rede não são mascarados: outro modelo não resolveria. */
+async function geminiGenerateWithFallback(systemText,userText,hooks={}){
   const models=geminiModelCandidates();
   let lastError=null, configuredGone=false;
   for(const model of models){
+    if(hooks.onModel)hooks.onModel(model);
     try{
-      const res=await geminiGenerate(model,systemText,userText);
-      /* só grava outro modelo se o configurado deixou de existir; falta de cota é passageira */
+      const res=await geminiGenerate(model,systemText,userText,hooks.onText);
+      /* só grava outro modelo se o configurado deixou de existir; falta de cota e lentidão são passageiras */
       res.persist=configuredGone;
       return res;
     }catch(e){
@@ -1106,7 +1213,7 @@ async function geminiGenerateWithFallback(systemText,userText){
       const gone=e?.status===404
         ||(e?.status===400&&/model|not found|unsupported|not available|does not exist/.test(msg)&&!/api key/.test(msg))
         ||(e?.status===403&&/model/.test(msg)&&!/api key/.test(msg));
-      const busy=e?.status===429||e?.status===500||e?.status===503||e?.status===504;
+      const busy=e?.status===429||e?.status===500||e?.status===503||e?.status===504||e?.timeout==='first';
       if(gone&&model===models[0])configuredGone=true;
       if(gone||busy)continue;
       throw e;
@@ -1121,13 +1228,26 @@ function modelNote(before,res){
   if(res.model===before)return '';
   return res.persist
     ?esc(before)+' não está mais disponível — o app passou a usar '+esc(res.model)+'.'
-    :esc(before)+' está sem cota ou sobrecarregado agora; esta resposta veio do '+esc(res.model)+' (a configuração foi mantida).';
+    :esc(before)+' está sem cota, sobrecarregado ou lento agora; esta resposta veio do '+esc(res.model)+' (a configuração foi mantida).';
+}
+/* aviso de espera com contador de segundos e o modelo da vez */
+function aiWaiting(target,label){
+  const t0=Date.now();
+  let model=normalizeGeminiModel(aiModel), on=true;
+  const paint=()=>{if(on)target.innerHTML='<div class="card"><div class="note"><span class="spin"></span>'+esc(label)+' — '+esc(model)+' · '+Math.round((Date.now()-t0)/1000)+' s<br><span style="font-size:12px;color:var(--faint)">Mantenha o app aberto até terminar.</span></div></div>'};
+  paint();
+  const iv=setInterval(paint,1000);
+  return{
+    setModel:m=>{model=m;paint()},
+    stop:()=>{on=false;clearInterval(iv)},
+    secs:()=>Math.round((Date.now()-t0)/1000)
+  };
 }
 function showGeminiError(target,e){
   const st=e?.status||null;
   const raw=e?.detail||e?.message||'erro desconhecido';
   let title='Falha na chamada', hint='';
-  if(e?.timeout){title='Tempo esgotado';hint='O Gemini não respondeu em '+(AI_TIMEOUT_MS/1000)+' s. Tente de novo; se repetir, faça uma pergunta mais curta.'}
+  if(e?.timeout){title='Tempo esgotado';hint=e.timeout==='first'?'Nenhum dos modelos tentados começou a responder em '+(AI_FIRST_MS/1000)+' s. Costuma ser sobrecarga do lado do Google — tente de novo em alguns minutos.':'A resposta não terminou a tempo. Tente de novo.'}
   else if(e?.network){title='Falha de conexão';hint='A chamada não chegou ao fim. Causas comuns: internet instável, bloqueador de conteúdo/VPN, ou o app ter ido para segundo plano durante a análise (no iPhone isso derruba a conexão). Toque em "Testar conexão": se o teste passar e só a análise falhar, o problema é a duração da resposta, não a chave.'}
   else if(st===400){title='Requisição rejeitada';hint=/api key/i.test(raw)?'A chave não foi aceita — gere uma nova no aistudio.google.com.':'Confira o nome do modelo configurado.'}
   else if(st===401){title='Chave não autorizada';hint='Gere ou confira a chave no aistudio.google.com.'}
@@ -1146,19 +1266,28 @@ async function runAI(question){
   }
   if(aiBusy)return;
   aiBusy=true;
-  target.innerHTML='<div class="card"><div class="note"><span class="spin"></span>Analisando seu histórico… mantenha o app aberto até terminar.</div></div>';
+  const title=question?'Resposta':'Análise do progresso';
+  const w=aiWaiting(target,question?'Perguntando':'Analisando seu histórico');
   const sys='Você é um coach de musculação baseado em evidências (Helms, Israetel, Schoenfeld). Responda em português brasileiro, direto e prático, em no máximo ~300 palavras. Diferencie variação normal de estagnação real. Aponte estagnações, padrões de RIR/fadiga e ações concretas com números quando os dados permitirem. Use **negrito** e listas curtas quando ajudar. Não repita os dados de volta — interprete-os — e não invente nada que não esteja neles.';
   try{
     const user=buildContext()+'\n\n'+(question?('Pergunta do atleta: '+question):'Faça uma análise do progresso: o que evolui, o que estagnou, padrão de RIR e risco de fadiga em déficit, e 2-3 ações concretas para as próximas 2 semanas.');
     const before=aiModel;
-    const res=await geminiGenerateWithFallback(sys,user);
+    const res=await geminiGenerateWithFallback(sys,user,{
+      onModel:w.setModel,
+      onText:(txt,m)=>{w.stop();target.innerHTML='<div class="card"><h3>'+title+'</h3><div class="sub">'+esc(m)+' · escrevendo…</div><div class="ai-out">'+mdToHtml(txt)+'</div></div>'}
+    });
+    w.stop();
     await adoptModel(res);
-    lastAI=mdToHtml(res.text)+(res.truncated?'<p>⚠️ <i>Resposta cortada no limite de tokens — peça de novo ou faça uma pergunta mais específica.</i></p>':'');
+    lastAI=mdToHtml(res.text)+(res.interrupted
+      ?'<p>⚠️ <i>A conexão caiu no meio da resposta — o texto acima está incompleto. Tente de novo.</i></p>'
+      :res.truncated?'<p>⚠️ <i>Resposta cortada no limite de tokens — peça de novo ou faça uma pergunta mais específica.</i></p>':'');
     const note=modelNote(before,res);
-    target.innerHTML='<div class="card"><h3>'+(question?'Resposta':'Análise do progresso')+'</h3><div class="sub">'+esc(res.model)+'</div>'+(note?'<p class="note" style="margin-top:6px;font-size:12px">'+note+'</p>':'')+'<div class="ai-out">'+lastAI+'</div></div>';
+    target.innerHTML='<div class="card"><h3>'+title+'</h3><div class="sub">'+esc(res.model)+' · '+w.secs()+' s</div>'+(note?'<p class="note" style="margin-top:6px;font-size:12px">'+note+'</p>':'')+'<div class="ai-out">'+lastAI+'</div></div>';
   }catch(e){
+    w.stop();
     showGeminiError(target,e);
   }finally{
+    w.stop();
     aiBusy=false;
   }
 }
@@ -1492,135 +1621,163 @@ function drawDietChart(){
   ctx.stroke();
 }
 
-/* ============ Hevy sync ============ */
-const normName=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
-function matchProgramEx(he){
-  for(const wo of program)for(const ex of wo.exercises)if(ex.hevyId&&ex.hevyId===he.exercise_template_id)return ex;
-  const ht=normName(he.title);
-  if(!ht)return null;
-  const hset=new Set(ht.split(' ').filter(t=>t.length>3));
-  let best=null,bestScore=0;
-  for(const wo of program)for(const ex of wo.exercises){
-    if(ex.hevyId)continue; /* já vinculado a outro template — nunca roubar o vínculo */
-    const eset=new Set(normName(ex.name).split(' ').filter(t=>t.length>3));
-    let score=0;
-    for(const t of eset)if(hset.has(t))score++;
-    if(score>bestScore){bestScore=score;best=ex}
+/* ============ Hevy: fonte do programa (rotinas) e do histórico (treinos) ============ */
+/* Cada exercício é identificado pelo código do template no Hevy (id "hevy_<template>"), o mesmo nas rotinas
+   e nos treinos registrados — o histórico se liga sozinho, sem vínculo manual. No app ficam só o RIR alvo e o incremento. */
+const HEVY_API='https://api.hevyapp.com/v1/';
+const K_HV2='ul_hevy_v2', K_HFOLD='ul_hevyfolders_v1';
+let hevyFolders=[], hevyErr='', hevyBusy=null;
+const normName=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+const hevyExId=tid=>'hevy_'+tid;
+async function hevyGet(path){
+  const r=await fetch(HEVY_API+path,{headers:{'api-key':hevyKey}});
+  if(r.status===404)return null; /* página além da última / lista vazia */
+  if(!r.ok){
+    let d='';try{const j=await r.json();d=j&&(j.error||j.message)||''}catch(_){}
+    throw new Error('HTTP '+r.status+(r.status===401?' — chave do Hevy inválida':(d?' — '+d:'')));
   }
-  /* exige 2+ palavras distintas em comum — 1 palavra ("press") não basta */
-  if(best&&bestScore>=2){best.hevyId=he.exercise_template_id;return best}
-  return null;
+  return r.json();
 }
-function convertHevy(w){
+async function hevyAll(path,key){
+  const out=[];
+  for(let page=1;page<=200;page++){
+    const d=await hevyGet(path+(path.includes('?')?'&':'?')+'page='+page+'&pageSize=10');
+    const list=(d&&d[key])||[];
+    out.push(...list);
+    if(!d||!list.length||(d.page_count!=null?page>=d.page_count:list.length<10))break;
+  }
+  return out;
+}
+/* treino registrado no Hevy → sessão do histórico (aquecimento fora; RIR = 10 − RPE) */
+function hevySession(w){
   const entries=[];
-  for(const he of (w.exercises||[])){
+  for(const he of [...(w.exercises||[])].sort((a,b)=>(a.index??0)-(b.index??0))){
     const sets=(he.sets||[]).filter(s=>s.type!=='warmup').map(s=>({
       w:s.weight_kg!=null?+s.weight_kg:null,
       r:s.reps!=null?+s.reps:null,
-      rir:s.rpe!=null?Math.max(0,Math.round(10-s.rpe)):null
+      rir:s.rpe!=null?Math.max(0,10-s.rpe):null /* exato: RPE 8,5 → RIR 1,5 */
     }));
     if(!sets.some(s=>s.r!=null))continue;
-    const m=matchProgramEx(he);
-    entries.push({exId:m?m.id:'hevy_'+(he.exercise_template_id||normName(he.title)),exName:m?m.name:(he.title||'Exercício'),sets});
+    entries.push({exId:he.exercise_template_id?hevyExId(he.exercise_template_id):'hevy_'+normName(he.title),exName:he.title||'Exercício',sets});
   }
-  return entries;
+  if(!entries.length)return null;
+  return{id:'hv_'+w.id,hevyId:w.id,hevyRid:w.routine_id||null,date:w.start_time||w.created_at||new Date().toISOString(),
+    workoutId:w.routine_id?'hvr_'+w.routine_id:'hevy',workoutName:w.title||'Treino Hevy',entries};
 }
-async function hevySync(manual){
-  if(!hevyKey)return{n:0};
-  const known=new Set(history.map(h=>h.hevyId).filter(Boolean));
-  let added=0,page=1;
-  const maxPages=manual?60:3;
-  try{
-    while(page<=maxPages){
-      const r=await fetch('https://api.hevyapp.com/v1/workouts?page='+page+'&pageSize=10',{headers:{'api-key':hevyKey}});
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      const data=await r.json();
-      const list=data.workouts||[];
-      let newInPage=0;
-      for(const w of list){
-        if(!w.id||known.has(w.id))continue;
-        const entries=convertHevy(w);
-        if(!entries.length)continue;
-        const title=w.title||'Treino Hevy';
-        const wo=program.find(x=>normName(x.name)===normName(title));
-        history.push({id:uid(),hevyId:w.id,date:w.start_time||w.created_at||new Date().toISOString(),workoutId:wo?wo.id:'hevy',workoutName:title,entries});
-        known.add(w.id);added++;newInPage++;
-      }
-      if(list.length<10)break;
-      if(!manual&&newInPage===0)break; /* sync rápido: parou de achar novidade */
-      page++;
-    }
-    if(added){
-      history.sort((a,b)=>new Date(a.date)-new Date(b.date));
-      await saveHistory();await saveProgram();/* persiste os hevyId mapeados */
-      await touchAndPush();
-      hevyLast=new Date().toISOString();await sSet(K_HSYNC,hevyLast);
-    }
-    return{n:added};
-  }catch(e){return{n:added,err:e&&e.message?e.message:'rede/CORS'}}
+const hevyRirDefault=repMin=>repMin>=12?[0,1]:(repMin<=6?[2,3]:[1,2]);
+/* moda das cargas das séries de trabalho da rotina (empate → maior) = carga planejada */
+function hevyPlanW(work){
+  const c={};
+  for(const s of work)if(s.weight_kg!=null&&+s.weight_kg>0)c[+s.weight_kg]=(c[+s.weight_kg]||0)+1;
+  let w=null,best=0;
+  for(const k in c)if(c[k]>best||(c[k]===best&&+k>w)){best=c[k];w=+k}
+  return w;
 }
-
-async function hevyImportRoutines(){
-  if(!hevyKey)return{err:'configure a chave do Hevy na aba Dados'};
-  let page=1, routines=[];
-  try{
-    while(page<=10){
-      const r=await fetch('https://api.hevyapp.com/v1/routines?page='+page+'&pageSize=10',{headers:{'api-key':hevyKey}});
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      const d=await r.json();
-      const list=d.routines||[];
-      routines.push(...list);
-      if(list.length<10)break;
-      page++;
-    }
-  }catch(e){return{err:e&&e.message?e.message:'rede/CORS'}}
-  if(!routines.length)return{err:'nenhuma rotina encontrada no Hevy'};
-  let created=0,updated=0,moved=0,newEx=0;
-  const seenRid=new Set();
-  for(const rt of routines){
-    seenRid.add(rt.id);
-    let wo=program.find(w=>w.hevyRid===rt.id)||program.find(w=>normName(w.name)===normName(rt.title));
-    if(!wo){wo={id:uid(),name:rt.title||'Treino',hevyRid:rt.id,exercises:[]};program.push(wo);created++}
-    else{wo.hevyRid=rt.id;wo.name=rt.title||wo.name;updated++}
-    const newList=[];
-    for(const he of (rt.exercises||[])){
-      const tid=he.exercise_template_id;
-      const work=(he.sets||[]).filter(s=>s.type!=='warmup');
-      const nSets=Math.max(1,work.length);
-      let rmin=null,rmax=null;
+/* rotinas do Hevy → programa. RIR alvo = 10 − RPE das séries da rotina; carga da rotina = carga planejada.
+   Sem RPE na rotina, vale o RIR ajustado no app (ou o padrão). O incremento continua sendo ajuste do app. */
+function hevyBuildProgram(routines,old){
+  const prev={}, prevOcc={};
+  for(const wo of old)for(const ex of wo.exercises){
+    const k=ex.hevyId?hevyExId(ex.hevyId):ex.id;
+    if(!prev[k])prev[k]=ex;
+    prevOcc[wo.id+'|'+k]=ex;
+  }
+  const sel=hevyFolders.some(f=>f.id===diet.settings.hevyFolder)?diet.settings.hevyFolder:null;
+  const fIdx={};
+  for(const f of hevyFolders)fIdx[f.id]=f.index??0;
+  const list=routines.filter(rt=>sel==null||rt.folder_id===sel).map((rt,i)=>({rt,i}))
+    .sort((a,b)=>((fIdx[a.rt.folder_id]??-1)-(fIdx[b.rt.folder_id]??-1))||a.i-b.i).map(x=>x.rt);
+  return list.map(rt=>({
+    id:'hvr_'+rt.id,name:rt.title||'Treino',hevyRid:rt.id,folderId:rt.folder_id??null,
+    exercises:[...(rt.exercises||[])].sort((a,b)=>(a.index??0)-(b.index??0)).filter(he=>he.exercise_template_id).map(he=>{
+      const id=hevyExId(he.exercise_template_id), o=prevOcc['hvr_'+rt.id+'|'+id]||prev[id];
+      const work=(he.sets||[]).filter(s=>s.type!=='warmup'&&s.type!=='dropset');
+      let lo=null,hi=null;
       for(const s of work){
-        const lo=s.rep_range&&s.rep_range.start!=null?+s.rep_range.start:(s.reps!=null?+s.reps:null);
-        const hi=s.rep_range&&s.rep_range.end!=null?+s.rep_range.end:(s.reps!=null?+s.reps:null);
-        if(lo!=null)rmin=rmin==null?lo:Math.min(rmin,lo);
-        if(hi!=null)rmax=rmax==null?hi:Math.max(rmax,hi);
+        const a=s.rep_range&&s.rep_range.start!=null?+s.rep_range.start:(s.reps!=null?+s.reps:null);
+        const b=s.rep_range&&s.rep_range.end!=null?+s.rep_range.end:(s.reps!=null?+s.reps:null);
+        if(a!=null)lo=lo==null?a:Math.min(lo,a);
+        if(b!=null)hi=hi==null?b:Math.max(hi,b);
       }
-      let ex=null,fromWo=null;
-      if(tid)for(const w2 of program){const f=w2.exercises.find(x=>x.hevyId===tid);if(f){ex=f;fromWo=w2;break}}
-      if(ex){
-        /* já existe: preserva id (histórico), RIR e incremento; move de treino se necessário */
-        if(fromWo!==wo){fromWo.exercises=fromWo.exercises.filter(x=>x!==ex);moved++}
-        ex.name=he.title||ex.name;
-        ex.sets=nSets;
-        if(rmin!=null)ex.repMin=rmin;
-        if(rmax!=null)ex.repMax=Math.max(rmax,ex.repMin);
+      const repMin=lo??o?.repMin??8, repMax=Math.max(hi??o?.repMax??12,repMin);
+      const rd=hevyRirDefault(repMin);
+      const rpes=work.map(s=>s.rpe).filter(v=>v!=null&&v!=='').map(Number).filter(v=>v>0);
+      const fromHevy=rpes.length>0;
+      return{id,hevyId:he.exercise_template_id,name:he.title||o?.name||'Exercício',sets:Math.max(1,work.length),repMin,repMax,
+        rirMin:fromHevy?Math.max(0,10-Math.max(...rpes)):(o?.rirMin??rd[0]),
+        rirMax:fromHevy?Math.max(0,10-Math.min(...rpes)):(o?.rirMax??rd[1]),
+        rirFromHevy:fromHevy,planW:hevyPlanW(work),
+        inc:prev[id]?.inc??(repMin<=8?2.5:1.25),rest:he.rest_seconds??o?.rest??120};
+    })
+  }));
+}
+/* versão anterior: sessões registradas no próprio app apontavam para exercícios vinculados → passam a usar o código do Hevy */
+function hevyMigrateLegacy(old){
+  const map={};
+  for(const wo of old)for(const ex of wo.exercises)if(ex.hevyId&&ex.id!==hevyExId(ex.hevyId))map[ex.id]=hevyExId(ex.hevyId);
+  for(const s of history)if(!s.hevyId)for(const e of s.entries)if(map[e.exId])e.exId=map[e.exId];
+}
+/* full=true (ou 1ª vez nesta versão): refaz todo o histórico do Hevy; senão, só o que mudou desde a última vez
+   (treinos novos, editados ou apagados no Hevy) */
+async function hevySync(full){
+  if(!hevyKey)return{n:0};
+  if(hevyBusy)return hevyBusy;
+  hevyBusy=(async()=>{
+    const started=new Date().toISOString();
+    try{
+      const routines=await hevyAll('routines','routines');
+      try{hevyFolders=(await hevyAll('routine_folders','routine_folders')).map(f=>({id:f.id,title:f.title,index:f.index}));await sSet(K_HFOLD,hevyFolders)}catch(_){}
+      const old=program, sig0=JSON.stringify([program,history]);
+      const firstRun=!(await sGet(K_HV2));
+      let n=0;
+      if(full||firstRun||!hevyLast){
+        hevyMigrateLegacy(old);
+        const fresh=(await hevyAll('workouts','workouts')).map(hevySession).filter(Boolean);
+        const had=new Set(history.filter(h=>h.hevyId).map(h=>h.hevyId));
+        n=fresh.filter(s=>!had.has(s.hevyId)).length;
+        history=history.filter(h=>!h.hevyId).concat(fresh);
       }else{
-        const rMin=rmin!=null?rmin:8, rMax=rmax!=null?Math.max(rmax,rMin):12;
-        ex={id:uid(),name:he.title||'Exercício',sets:nSets,repMin:rMin,repMax:rMax,rirMin:1,rirMax:2,inc:rMin<=8?2.5:1.25,rest:120,hevyId:tid||null};
-        newEx++;
+        const since=new Date(new Date(hevyLast).getTime()-10*60000).toISOString(); /* margem de 10 min */
+        for(const ev of await hevyAll('workouts/events?since='+encodeURIComponent(since),'events')){
+          const wid=ev.type==='deleted'?ev.id:ev.workout&&ev.workout.id;
+          if(!wid)continue;
+          const had=history.some(h=>h.hevyId===wid);
+          history=history.filter(h=>h.hevyId!==wid);
+          if(ev.type!=='deleted'){const s=hevySession(ev.workout);if(s){history.push(s);if(!had)n++}}
+        }
       }
-      newList.push(ex);
+      history.sort((a,b)=>new Date(a.date)-new Date(b.date));
+      program=hevyBuildProgram(routines,old);
+      if(!program.find(w=>w.id===selWorkout))selWorkout=program[0]?.id;
+      const changed=JSON.stringify([program,history])!==sig0;
+      if(changed){await saveProgram();await saveHistory();await touchAndPush()}
+      if(firstRun)await sSet(K_HV2,1);
+      hevyLast=started;await sSet(K_HSYNC,hevyLast);
+      hevyErr='';
+      return{n,changed,shown:program.length,total:history.filter(h=>h.hevyId).length};
+    }catch(e){
+      hevyErr=e&&e.message?e.message:'rede/CORS';
+      return{n:0,err:hevyErr};
     }
-    if(newList.length)wo.exercises=newList;
-  }
-  const obsolete=program.filter(w=>(w.hevyRid&&!seenRid.has(w.hevyRid))||w.exercises.length===0);
-  if(obsolete.length){
-    if(confirm('Estes treinos não existem mais no Hevy (ou ficaram vazios):\n\n'+obsolete.map(w=>'• '+w.name).join('\n')+'\n\nRemover do programa? (o histórico deles é preservado)')){
-      program=program.filter(w=>!obsolete.includes(w));
-    }
-  }
-  if(!program.find(w=>w.id===selWorkout))selWorkout=program[0]?.id;
-  await saveProgram();await touchAndPush();
-  return{created,updated,moved,newEx};
+  })();
+  try{return await hevyBusy}finally{hevyBusy=null}
+}
+/* faixa com a hora da última atualização e o botão ↻ (abas Progressão e Programa) */
+function hevyBar(){
+  if(!hevyKey)return '';
+  const when=hevyLast?new Date(hevyLast).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+  return `<div class="hevybar"><span>🔗 Hevy · ${hevyErr?'<b style="color:var(--hold)">falhou: '+esc(hevyErr)+'</b>':'atualizado '+when}</span><button class="mini up2" id="hvpull">↻ Atualizar</button></div>`;
+}
+function bindHevyBar(){
+  const b=document.getElementById('hvpull');
+  if(!b)return;
+  b.onclick=async()=>{
+    if(tab==='program')harvest();
+    b.disabled=true;b.textContent='Atualizando…';
+    const r=await hevySync(false);
+    toast(r.err?'⚠️ Hevy: '+r.err:(r.n?'✓ '+r.n+' treino(s) novo(s) do Hevy':'✓ Hevy em dia'));
+    render();
+  };
 }
 
 /* ============ util ============ */
