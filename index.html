@@ -214,7 +214,6 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
   <button data-tab="home" class="active"><span class="ic">📊</span>Resumo</button>
   <button data-tab="train"><span class="ic">📈</span>Progressão</button>
   <button data-tab="diet"><span class="ic">⚖️</span>Dieta</button>
-  <button data-tab="program"><span class="ic">📋</span>Programa</button>
   <button data-tab="ai"><span class="ic">🧠</span>Análise</button>
   <button data-tab="data"><span class="ic">📤</span>Dados</button>
 </nav>
@@ -227,37 +226,6 @@ let program=[], history=[], tab='home', selWorkout=null, memOnly=false, apiKey='
 let diet={entries:{},settings:{mode:'deficit',rate:0.4,protTarget:180,protPerKg:2.1,fatPct:25,tdee0:2820}}, dietRange=30, homeMonth=new Date(), homeSel=null;
 
 const uid=()=>Math.random().toString(36).slice(2,9);
-
-function defaultProgram(){
-  const ex=(name,sets,repMin,repMax,rirMin,rirMax,inc,rest)=>({id:uid(),name,sets,repMin,repMax,rirMin,rirMax,inc,rest:rest||120});
-  return [
-    {id:uid(),name:'Upper A',exercises:[
-      ex('Puxada Alta na Polia (pronada aberta)',4,6,8,2,2,2.5,150),
-      ex('Supino Inclinado (Halter)',3,8,10,1,2,2,150),
-      ex('Remada Máquina Fechada',4,8,10,1,2,2.5,120),
-      ex('Prensa de Ombros Sentada (Máquina)',3,8,10,1,2,2.5,120),
-      ex('Elevação Lateral Unilateral (Cabo)',4,12,15,0,1,1.25,75),
-      ex('Rosca Direta na Barra W',3,8,10,1,1,2,90),
-      ex('Tríceps na Polia (Corda)',3,10,12,1,1,1.25,75)]},
-    {id:uid(),name:'Upper B',exercises:[
-      ex('Remada Baixa no Cabo (Triângulo)',4,8,10,1,2,2.5,120),
-      ex('Supino Reto (Barra ou Máquina)',3,6,8,2,3,2.5,180),
-      ex('Pulley Frente Pegada Fechada (ou Pullover Cabo)',3,10,12,1,2,2.5,120),
-      ex('Voador Peitoral (Peck Deck)',3,12,15,0,1,2.5,75),
-      ex('Elevação Lateral (Halter ou Cabo)',4,12,15,0,1,1.25,75),
-      ex('Crucifixo Inverso na Máquina',4,12,15,0,1,2.5,75),
-      ex('Rosca Martelo',3,10,12,1,1,2,90),
-      ex('Tríceps Francês na Corda (Polia)',3,10,12,1,1,1.25,75)]},
-    {id:uid(),name:'Lower',exercises:[
-      ex('Agachamento Livre',3,6,8,2,3,2.5,180),
-      ex('Leg Press 45°',3,10,12,1,2,5,150),
-      ex('Mesa Flexora',4,10,12,1,1,2.5,90),
-      ex('Hip Thrust Máquina (ou Ext. Lombar 45°)',3,10,12,1,2,2.5,120),
-      ex('Cadeira Extensora',3,12,15,1,1,2.5,75),
-      ex('Panturrilha em Pé',4,12,15,1,1,2.5,60),
-      ex('Abdominal Infra (Elevação de Pernas)',3,12,15,1,1,0,60)]}
-  ];
-}
 
 async function sGet(k){
   if(window.storage){try{const r=await window.storage.get(k);return r?JSON.parse(r.value):null}catch(e){return null}}
@@ -284,7 +252,6 @@ async function boot(){
   hevyLast=await sGet(K_HSYNC)||'';
   if(ghToken&&gistId)await cloudPull();
   hevyFolders=await sGet(K_HFOLD)||[];
-  if(!program.length&&!hevyKey){program=defaultProgram();await saveProgram()}
   /* migração: exercícios sem tempo de descanso ganham um pela faixa de reps */
   for(const wo of program)for(const ex of wo.exercises){
     if(ex.rest==null)ex.rest=ex.repMin<=6?180:(ex.repMin<=8?150:(ex.repMin<=10?120:75));
@@ -295,9 +262,9 @@ async function boot(){
     const firstHv=!(await sGet(K_HV2));
     if(firstHv)toast('Atualizando do Hevy…');
     hevySync(false).then(r=>{
-      if(r.err){toast('⚠️ Hevy: '+r.err);if(tab==='train'||tab==='program')render();return}
-      if(r.changed&&['home','train','program','data'].includes(tab)){if(tab==='program')harvest();render()}
-      if(firstHv)toast('✓ Programa e histórico agora vêm do Hevy — '+r.shown+' rotina(s)');
+      if(r.err){toast('⚠️ Hevy: '+r.err);if(tab==='train')render();return}
+      if(r.changed&&['home','train','data'].includes(tab))render();
+      if(firstHv)toast('✓ Treinos e histórico agora vêm do Hevy — '+r.shown+' rotina(s)');
       else if(r.n)toast('✓ '+r.n+' treino(s) novo(s) do Hevy');
     });
   }
@@ -425,7 +392,8 @@ function suggest(ex,wo){
     if(oldTot!=null&&lastTot<=oldTot)return{type:'stall',w:null,label:'ESTAGNOU',msg:`3 sessões sem evolução de reps (${oldTot} → ${lastTot}). Desacelere a descida, acrescente carga ou troque a variação.`};
     return{type:'keep',w:null,label:'MANTÉM — BUSCA REPS',msg:`Some reps até ${diet.settings.progMode==='flexivel'?'o total ficar a 1 do máximo':'todas as séries baterem '+ex.repMax}.`};
   }
-  if(A.top&&ex.inc>0)return{type:'up',w:round25(w+ex.inc),label:'SOBE CARGA',msg:`Faixa dominada nas séries de trabalho (${fmt(w)} kg) → sobe para ${fmt(round25(w+ex.inc))} kg.`};
+  const inc=incFor(ex);
+  if(A.top&&inc>0)return{type:'up',w:round25(w+inc),label:'SOBE CARGA',msg:`Faixa dominada nas séries de trabalho (${fmt(w)} kg) → sobe para ${fmt(round25(w+inc))} kg.`};
   if(A.top)return{type:'up',w,label:'PROGRIDE',msg:'Faixa dominada — adicione 1 rep acima do topo ou reduza o RIR.'};
   /* estagnação: 3+ sessões na mesma carga de referência, sem topo E sem evolução no total de reps */
   const run=[A];
@@ -437,23 +405,37 @@ function suggest(ex,wo){
   const repsGrowing=run.length>=2&&run[0].total>run[1].total;
   const stalled=run.length>=3&&run[0].total<=run[2].total;
   if(stalled){const d=round25(w*0.9);return{type:'stall',w:d,label:'ESTAGNOU — MICRODELOAD',msg:`${run.length} sessões em ${fmt(w)} kg sem evolução de reps (${run[2].total} → ${run[0].total}). Recue ~10% (${fmt(d)} kg) e reconstrua, ou troque o exercício.`}}
-  if(A.ground)return{type:'hold',w:ex.inc>0?round25(Math.max(0,w-ex.inc)):w,label:'SEGURA / REDUZ',msg:`Reps abaixo da faixa com RIR 0 → recue ${fmt(ex.inc)} kg e domine a faixa.`};
+  if(A.ground)return{type:'hold',w:round25(Math.max(0,w-inc)),label:'SEGURA / REDUZ',msg:`Reps abaixo da faixa com RIR 0 → recue ${fmt(inc)} kg e domine a faixa.`};
   if(A.anyBelow)return{type:'hold',w,label:'SEGURA CARGA',msg:'Série de trabalho abaixo da faixa — mantenha o peso até entrar na faixa completa.'};
   return{type:'keep',w,label:'MANTÉM — BUSCA REPS',msg:`Mantenha ${fmt(w)} kg e some reps até ${diet.settings.progMode==='flexivel'?'o total ficar a 1 do máximo':'todas as séries baterem '+ex.repMax}.${repsGrowing?' Reps evoluindo ('+run[1].total+' → '+run[0].total+') — no caminho certo.':''}`};
 }
 const round25=v=>Math.round(v/0.25)*0.25;
 const fmt=v=>(+v).toLocaleString('pt-BR',{maximumFractionDigits:2});
 const fmtR=(a,b)=>fmt(a)+(b!=null&&+b!==+a?'–'+fmt(b):''); /* faixa: "8–10", "1,5–2" ou "2" */
+/* incremento de carga aprendido dos seus próprios aumentos no Hevy: o degrau de subida mais comum entre
+   sessões (0,5 a 10 kg); sem histórico suficiente, um padrão pelo tipo de exercício */
+function incFor(ex){
+  const ws=[];
+  for(const h of history){const e=h.entries.find(x=>x.exId===ex.id);if(e){const r=aiReferenceSets(e.sets);if(r.weight)ws.push(r.weight)}}
+  const cnt={};
+  for(let i=1;i<ws.length;i++){const d=round25(ws[i]-ws[i-1]);if(d>=0.5&&d<=10)cnt[d]=(cnt[d]||0)+1}
+  let best=null,bc=0;
+  for(const k in cnt)if(cnt[k]>bc||(cnt[k]===bc&&+k<best)){bc=cnt[k];best=+k}
+  if(best)return best;
+  if(/dumbbell|halter/i.test(ex.name))return 2;
+  return ex.inc>0?ex.inc:(ex.repMin<=8?2.5:1.25);
+}
 
 /* ============ render ============ */
 const view=document.getElementById('view');
 function render(){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  const sm=document.querySelector('h1 small');
+  if(sm)sm.textContent=program.length?program.map(w=>w.name).join(' · ')+' — do Hevy':'Treino do Hevy';
   weekbar();
   if(tab==='home')renderHome();
   else if(tab==='train')renderTrain();
   else if(tab==='diet')renderDiet();
-  else if(tab==='program')renderProgram();
   else if(tab==='ai')renderAI();
   else renderData();
 }
@@ -591,21 +573,36 @@ function drawTonnage(){
 }
 
 /* ---- TRAIN ---- */
+/* aviso para aparelho sem a chave do Hevy (os treinos ainda chegam pela nuvem, se houver) */
+function hevyConnectCard(){
+  if(hevyKey)return '';
+  return `<div class="card"><h3>🔗 Conecte o Hevy neste aparelho</h3>
+    <p class="note" style="margin:8px 0 12px">O treino vem inteiro das suas rotinas do Hevy — não há nada para montar aqui. Configure a chave da API do Hevy na aba Dados para puxar os treinos direto${program.length?'; até lá, você vê o que chegou pela nuvem do outro aparelho':''}.</p>
+    <button class="btn ghost" id="gohevy">Configurar na aba Dados</button></div>`;
+}
 function renderTrain(){
+  const pm=diet.settings.progMode||'conservador';
+  const modeCard=`<div class="card">
+    <h3>Modo de progressão</h3>
+    <div class="modegrid" style="grid-template-columns:1fr 1fr">
+      <button data-pm="conservador" class="${pm==='conservador'?'on':''}">Conservador</button>
+      <button data-pm="flexivel" class="${pm==='flexivel'?'on':''}">Flexível</button>
+    </div>
+    <p class="note" style="font-size:12.5px"><b>Conservador:</b> sobe a carga só quando todas as séries de trabalho batem o topo da faixa. <b>Flexível:</b> sobe quando o total de reps fica a 1 do máximo (ex.: 10/10/9 em 3×8-10). Os dois exigem o RIR da rotina. O incremento de cada exercício é aprendido dos seus próprios aumentos de carga no Hevy.</p>
+  </div>`;
+  let h=hevyConnectCard()+hevyBar();
   if(!program.length){
-    view.innerHTML=hevyKey
-      ?hevyBar()+'<div class="empty">Nenhuma rotina do Hevy'+(diet.settings.hevyFolder!=null?' nesta pasta':'')+' ainda.<br>Monte seus treinos no Hevy (Treino → Rotinas) e toque em ↻ Atualizar.</div>'
-      :'<div class="empty">Nenhum treino no programa. Crie um na aba Programa.</div>';
-    bindHevyBar();
+    if(hevyKey)h+='<div class="empty">Nenhuma rotina do Hevy'+(diet.settings.hevyFolder!=null?' nesta pasta':'')+' ainda.<br>Monte seus treinos no Hevy (Treino → Rotinas) e toque em ↻ Atualizar.</div>';
+    view.innerHTML=h;
+    bindTrain();
     return;
   }
   if(!program.find(w=>w.id===selWorkout))selWorkout=program[0].id;
   const wo=program.find(w=>w.id===selWorkout);
   const dlRef=diet.settings.lastDeload||(history.length?dISO(new Date(history[0].date)):null);
   const dlWks=dlRef?Math.floor((Date.now()-new Date(dlRef).getTime())/6048e5):0;
-  let bn='';
-  if(dlRef&&dlWks>=6)bn=`<div class="decide stall" style="margin-bottom:14px"><b>DELOAD SUGERIDO</b><span style="font-size:12.5px;color:var(--muted)">${dlWks} semanas sem deload — faça uma semana com metade das séries e cargas ~15% menores. <button class="mini up2" id="deloaddone" style="padding:0 4px;text-decoration:underline">marcar como feito</button></span></div>`;
-  let h=hevyBar()+bn+`<div class="chips">${program.map(w=>`<button class="chip ${w.id===selWorkout?'sel':''}" data-wo="${w.id}">${esc(w.name)}</button>`).join('')}</div>`;
+  if(dlRef&&dlWks>=6)h+=`<div class="decide stall" style="margin-bottom:14px"><b>DELOAD SUGERIDO</b><span style="font-size:12.5px;color:var(--muted)">${dlWks} semanas sem deload — faça uma semana com metade das séries e cargas ~15% menores. <button class="mini up2" id="deloaddone" style="padding:0 4px;text-decoration:underline">marcar como feito</button></span></div>`;
+  h+=`<div class="chips">${program.map(w=>`<button class="chip ${w.id===selWorkout?'sel':''}" data-wo="${w.id}">${esc(w.name)}</button>`).join('')}</div>`;
   h+=wo.exercises.map(ex=>{
     const sg=suggest(ex,wo);
     const prev=lastEntries(ex.id,1,exScope(ex,wo))[0];
@@ -626,155 +623,25 @@ function renderTrain(){
       :`<div class="rotline">📋 Rotina no Hevy: ${fmt(ex.planW)} kg → ajuste para <b>${fmt(sg.w)} kg</b></div>`;
     return `<div class="card">
       <h3>${esc(ex.name)}</h3>
-      <div class="sub">${ex.sets} × ${fmtR(ex.repMin,ex.repMax)} reps · RIR ${fmtR(ex.rirMin,ex.rirMax)}${ex.inc>0&&!bwEx?' · +'+fmt(ex.inc)+' kg':''}</div>
+      <div class="sub">${ex.sets} × ${fmtR(ex.repMin,ex.repMax)} reps · RIR ${fmtR(ex.rirMin,ex.rirMax)}${bwEx?'':' · +'+fmt(incFor(ex))+' kg'}</div>
       <div class="decide ${sg.type}"><b>${sg.label}${sg.w!=null?' · '+fmt(sg.w)+' kg':''}</b></div>
       <div class="note" style="margin:-4px 0 0;font-size:12.5px">${sg.msg}</div>
       ${rot}
       ${lastLine}
     </div>`;
   }).join('');
+  h+=modeCard;
   view.innerHTML=h;
+  bindTrain();
+}
+function bindTrain(){
   bindHevyBar();
+  const gh=document.getElementById('gohevy');
+  if(gh)gh.onclick=()=>{tab='data';render()};
   view.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{selWorkout=c.dataset.wo;render()});
+  view.querySelectorAll('[data-pm]').forEach(b=>b.onclick=async()=>{diet.settings.progMode=b.dataset.pm;await saveDiet();await touchAndPush();toast('✓ Modo '+(b.dataset.pm==='flexivel'?'flexível':'conservador'));render()});
   const dl=document.getElementById('deloaddone');
   if(dl)dl.onclick=async()=>{diet.settings.lastDeload=todayISO();await saveDiet();await touchAndPush();toast('✓ Deload registrado');render()};
-  view.querySelectorAll('.setrow input').forEach(i=>i.addEventListener('input',()=>i.classList.toggle('done',i.value!=='')));
-}
-
-/* ---- PROGRAM (editable) ---- */
-function renderProgram(){
-  const pm=diet.settings.progMode||'conservador';
-  let h=`<div class="card">
-    <h3>Modo de progressão</h3>
-    <div class="modegrid" style="grid-template-columns:1fr 1fr">
-      <button data-pm="conservador" class="${pm==='conservador'?'on':''}">Conservador</button>
-      <button data-pm="flexivel" class="${pm==='flexivel'?'on':''}">Flexível</button>
-    </div>
-    <p class="note" style="font-size:12.5px"><b>Conservador:</b> sobe carga só quando todas as séries de trabalho batem o topo da faixa. <b>Flexível:</b> sobe quando o total de reps fica a 1 do máximo (ex.: 10/10/9 em 3×8-10 já progride). Ambos exigem RIR dentro do alvo.</p>
-  </div>`;
-  if(hevyKey)return renderProgramHevy(h);
-  h+=program.map((wo,wi)=>`<div class="card">
-    <div class="exhead">
-      <input type="text" value="${esc(wo.name)}" data-wname="${wo.id}" style="background:none;border:none;color:var(--text);font:800 17px inherit;width:60%">
-      <span>
-        <button class="mini up2" data-addex="${wo.id}">+ exercício</button>
-        <button class="mini red" data-delwo="${wo.id}">excluir</button>
-      </span>
-    </div>
-    ${wo.exercises.map((ex,ei)=>`<div class="exedit" data-exid="${ex.id}">
-      <div class="exhead" style="margin-bottom:8px">
-        <span class="drag">${ei>0?`<button class="mini" data-mvup="${wo.id}|${ex.id}">↑</button>`:''}${ei<wo.exercises.length-1?`<button class="mini" data-mvdn="${wo.id}|${ex.id}">↓</button>`:''}</span>
-        <button class="mini red" data-delex="${wo.id}|${ex.id}">remover</button>
-      </div>
-      <input type="text" value="${esc(ex.name)}" data-e="name">
-      <div class="grid6">
-        <div class="fld"><label>Séries</label><input type="number" value="${ex.sets}" data-e="sets" min="1" max="10"></div>
-        <div class="fld"><label>Rep mín</label><input type="number" value="${ex.repMin}" data-e="repMin"></div>
-        <div class="fld"><label>Rep máx</label><input type="number" value="${ex.repMax}" data-e="repMax"></div>
-        <div class="fld"><label>RIR mín</label><input type="number" value="${ex.rirMin}" data-e="rirMin"></div>
-        <div class="fld"><label>RIR máx</label><input type="number" value="${ex.rirMax}" data-e="rirMax"></div>
-        <div class="fld"><label>Incr. kg</label><input type="number" step="0.25" value="${ex.inc}" data-e="inc"></div>
-      </div>
-    </div>`).join('')}
-  </div>`).join('');
-  h+=`<p class="note" style="margin:6px 0">Quer montar o treino no Hevy? Configure a chave da API na aba Dados — as rotinas de lá passam a ser o programa.</p>
-      <button class="btn ghost" id="addwo" style="margin-top:10px">+ Adicionar treino</button>
-      <button class="btn" id="saveprog" style="margin-top:10px">Salvar programa</button>`;
-  view.innerHTML=h;
-  bindProgMode();
-  document.getElementById('addwo').onclick=()=>{program.push({id:uid(),name:'Novo treino',exercises:[]});renderProgram()};
-  document.getElementById('saveprog').onclick=async()=>{harvest();await saveProgram();await touchAndPush();toast('✓ Programa salvo');};
-  view.querySelectorAll('[data-addex]').forEach(b=>b.onclick=()=>{harvest();const wo=program.find(w=>w.id===b.dataset.addex);wo.exercises.push({id:uid(),name:'Novo exercício',sets:3,repMin:8,repMax:10,rirMin:1,rirMax:2,inc:2.5});renderProgram()});
-  view.querySelectorAll('[data-delwo]').forEach(b=>b.onclick=()=>{if(confirm('Excluir este treino?')){harvest();program=program.filter(w=>w.id!==b.dataset.delwo);renderProgram()}});
-  view.querySelectorAll('[data-delex]').forEach(b=>b.onclick=()=>{harvest();const[wid,eid]=b.dataset.delex.split('|');const wo=program.find(w=>w.id===wid);wo.exercises=wo.exercises.filter(e=>e.id!==eid);renderProgram()});
-  const mv=(wid,eid,d)=>{harvest();const wo=program.find(w=>w.id===wid);const i=wo.exercises.findIndex(e=>e.id===eid);const j=i+d;if(j<0||j>=wo.exercises.length)return;[wo.exercises[i],wo.exercises[j]]=[wo.exercises[j],wo.exercises[i]];renderProgram()};
-  view.querySelectorAll('[data-mvup]').forEach(b=>b.onclick=()=>{const[w,e]=b.dataset.mvup.split('|');mv(w,e,-1)});
-  view.querySelectorAll('[data-mvdn]').forEach(b=>b.onclick=()=>{const[w,e]=b.dataset.mvdn.split('|');mv(w,e,1)});
-}
-function bindProgMode(){
-  view.querySelectorAll('[data-pm]').forEach(b=>b.onclick=async()=>{harvest();diet.settings.progMode=b.dataset.pm;await saveDiet();await touchAndPush();toast('✓ Modo '+b.dataset.pm);renderProgram()});
-}
-/* programa vindo do Hevy: estrutura, carga e RPE só leitura (edita-se no Hevy); aqui só o incremento
-   (e o RIR, apenas quando a rotina não tem RPE) */
-function renderProgramHevy(h){
-  const sel=diet.settings.hevyFolder;
-  h+=`<div class="card">
-    <h3>Programa = suas rotinas do Hevy</h3>
-    <p class="note" style="margin:8px 0 10px">Exercícios, séries, faixa de reps, carga, RPE e descanso vêm das <b>rotinas do Hevy</b> — para mudar o treino, edite lá. O <b>RPE da rotina vira o RIR alvo</b> (RIR = 10 − RPE). Aqui fica só o <b>incremento</b> de carga de cada exercício, que o Hevy não tem.</p>
-    ${hevyFolders.length>1?`<div class="fld"><label>Pasta do Hevy</label><select id="hvfolder"><option value="">Todas as rotinas</option>${hevyFolders.map(f=>`<option value="${esc(f.id)}"${sel!=null&&String(sel)===String(f.id)?' selected':''}>${esc(f.title||'Sem nome')}</option>`).join('')}</select></div>`:''}
-    ${hevyBar()}
-  </div>`;
-  if(!program.length)h+=`<div class="empty">Nenhuma rotina ${sel!=null?'nesta pasta':'no Hevy'} ainda. Monte seus treinos no Hevy e toque em ↻ Atualizar.</div>`;
-  const seen={};
-  h+=program.map(wo=>`<div class="card">
-    <h3>${esc(wo.name)}</h3>
-    ${wo.exercises.map(ex=>{
-      const dup=seen[ex.id];
-      if(!dup)seen[ex.id]=wo.name;
-      const fixed=ex.repMin===ex.repMax;
-      const rirTxt='RIR '+fmtR(ex.rirMin,ex.rirMax)+(ex.rirFromHevy?' (RPE '+fmtR(10-ex.rirMax,10-ex.rirMin)+')':'');
-      const rirIn=ex.rirFromHevy?'':`<div class="fld"><label>RIR mín</label><input type="number" step="0.5" value="${ex.rirMin}" data-e="rirMin"></div>
-          <div class="fld"><label>RIR máx</label><input type="number" step="0.5" value="${ex.rirMax}" data-e="rirMax"></div>`;
-      const incIn=dup?'':`<div class="fld"><label>Incr. kg</label><input type="number" step="0.25" value="${ex.inc}" data-e="inc"></div>`;
-      return `<div class="exedit" data-exid="${esc(ex.id)}" data-wid="${esc(wo.id)}">
-        <div style="font-weight:700;font-size:14px">${esc(ex.name)}</div>
-        <div class="sub">${ex.sets} × ${fmtR(ex.repMin,ex.repMax)} reps${ex.planW?' · '+fmt(ex.planW)+' kg':''} · ${rirTxt} · descanso ${ex.rest} s</div>
-        ${fixed?`<p class="note" style="font-size:12px;margin:6px 0 0">Reps fixas no Hevy — para a dupla progressão, use uma faixa na rotina (ex.: ${ex.repMin}–${ex.repMin+2}).</p>`:''}
-        ${ex.rirFromHevy?'':`<p class="note" style="font-size:12px;margin:6px 0 0">Esta rotina não tem RPE no Hevy — coloque lá (RPE 8 = RIR 2) ou ajuste o RIR aqui.</p>`}
-        ${dup?`<p class="note" style="font-size:12px;margin:6px 0 0">Incremento: o mesmo de <b>${esc(dup)}</b>.</p>`:''}
-        ${rirIn||incIn?`<div class="grid6" style="margin-top:8px">${rirIn}${incIn}</div>`:''}
-      </div>`;
-    }).join('')}
-  </div>`).join('');
-  if(program.length)h+=`<button class="btn" id="saveprog" style="margin-top:4px">Salvar ajustes</button>`;
-  view.innerHTML=h;
-  bindProgMode();
-  bindHevyBar();
-  const fs=document.getElementById('hvfolder');
-  if(fs)fs.onchange=async()=>{
-    harvest();
-    diet.settings.hevyFolder=fs.value===''?null:Number(fs.value);
-    await saveDiet();
-    toast('Atualizando rotinas…');
-    const r=await hevySync(false);
-    if(r.err)toast('⚠️ Hevy: '+r.err);
-    else await touchAndPush();
-    renderProgram();
-  };
-  const sp=document.getElementById('saveprog');
-  if(sp)sp.onclick=async()=>{harvest();await saveProgram();await touchAndPush();toast('✓ Ajustes salvos')};
-}
-function harvest(){ /* read edits from DOM into state */
-  if(hevyKey){
-    /* modo Hevy: incremento vale para todas as ocorrências do exercício; RIR só onde a rotina não tem RPE */
-    view.querySelectorAll('.exedit').forEach(box=>{
-      const vals={};
-      box.querySelectorAll('[data-e]').forEach(inp=>{const v=numBR(inp.value);if(v!=null)vals[inp.dataset.e]=v});
-      if(!Object.keys(vals).length)return;
-      for(const wo of program)for(const ex of wo.exercises)if(ex.id===box.dataset.exid){
-        if(vals.inc!=null)ex.inc=Math.max(0,vals.inc);
-        if(wo.id===box.dataset.wid&&!ex.rirFromHevy){
-          if(vals.rirMin!=null)ex.rirMin=Math.max(0,vals.rirMin);
-          if(vals.rirMax!=null)ex.rirMax=Math.max(0,vals.rirMax);
-          if(ex.rirMax<ex.rirMin)ex.rirMax=ex.rirMin;
-        }
-      }
-    });
-    return;
-  }
-  view.querySelectorAll('[data-wname]').forEach(i=>{const wo=program.find(w=>w.id===i.dataset.wname);if(wo)wo.name=i.value.trim()||wo.name});
-  view.querySelectorAll('.exedit').forEach(box=>{
-    const id=box.dataset.exid;
-    for(const wo of program){const ex=wo.exercises.find(e=>e.id===id);if(ex){
-      box.querySelectorAll('[data-e]').forEach(inp=>{
-        const k=inp.dataset.e;
-        if(k==='name')ex[k]=inp.value.trim()||ex.name;
-        else{const v=numBR(inp.value);if(v!=null)ex[k]=v}
-      });
-      if(ex.repMax<ex.repMin)ex.repMax=ex.repMin;
-      if(ex.rirMax<ex.rirMin)ex.rirMax=ex.rirMin;
-    }}
-  });
 }
 
 /* ---- DATA ---- */
@@ -802,7 +669,7 @@ function renderData(){
   </div>
   <div class="card">
     <h3>🔗 Hevy — monte e treine lá, progrida aqui</h3>
-    <p class="note" style="margin:8px 0 12px">Monte os treinos como <b>rotinas no Hevy</b> e registre as sessões lá. O app puxa as rotinas como programa e os treinos como histórico — cada exercício é reconhecido pelo próprio código do Hevy, sem vincular nada. Atualiza sozinho a cada abertura. Requer <b>Hevy Pro</b> — chave em hevy.com/settings → Developer.</p>
+    <p class="note" style="margin:8px 0 12px">O treino vem inteiro do <b>Hevy</b>: as rotinas (exercícios, séries, faixa de reps, carga e RPE) viram os treinos da aba Progressão, e as sessões que você registra lá viram o histórico. Nada é montado aqui. Atualiza sozinho a cada abertura. A chave fica só neste aparelho — configure no iPhone e no Mac. Requer <b>Hevy Pro</b> — chave em hevy.com/settings → Developer.</p>
     <details ${hevyKey?'':'open'}>
       <summary>${hevyKey?'Chave configurada — alterar':'Configurar chave do Hevy'}</summary>
       <input type="password" id="hevykey" placeholder="chave da API do Hevy" value="${esc(hevyKey||'')}" autocomplete="off" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono);margin-top:8px">
@@ -812,6 +679,7 @@ function renderData(){
       <button class="btn ghost" id="hevyimp">↻ Atualizar agora</button>
       <button class="btn ghost" id="hevyfull">Reimportar tudo</button>
     </div>`:''}
+    ${hevyKey&&hevyFolders.length>1?`<div class="fld" style="margin-top:12px"><label>Pasta de rotinas usada como treino</label><select id="hvfolder"><option value="">Todas as rotinas</option>${hevyFolders.map(f=>`<option value="${esc(f.id)}"${diet.settings.hevyFolder!=null&&String(diet.settings.hevyFolder)===String(f.id)?' selected':''}>${esc(f.title||'Sem nome')}</option>`).join('')}</select></div>`:''}
     ${hevyKey?`<p class="note" style="margin-top:8px;font-family:var(--mono);font-size:12px">${hevyErr?'⚠️ Última tentativa falhou: '+esc(hevyErr):'Última atualização: '+(hevyLast?new Date(hevyLast).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—')}</p>`:''}
     <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">O <b>RPE da rotina</b> vira o RIR alvo e o <b>RPE registrado no treino</b> é comparado com ele (RIR = 10 − RPE). Sem RPE no treino, o app assume que o alvo foi respeitado. Séries de aquecimento são ignoradas. A carga da rotina aparece na aba Progressão com o aviso de quando atualizá-la no Hevy — o app não grava na rotina porque a API do Hevy apagaria o RPE dela.</p>
   </div>
@@ -834,7 +702,7 @@ function renderData(){
     <details><summary>Dupla Progressão Autorregulada</summary>
       <p class="note">Cada exercício tem uma <b>faixa de reps</b> e um <b>RIR alvo</b>. Após cada sessão registrada:</p>
       <p class="note" style="margin-top:6px">
-      🟢 <b>SOBE CARGA</b> — todas as séries no topo da faixa com RIR ≥ alvo → soma o incremento.<br>
+      🟢 <b>SOBE CARGA</b> — todas as séries no topo da faixa com RIR ≥ alvo → soma o incremento (o degrau de carga que você mais usa naquele exercício no Hevy).<br>
       🟡 <b>MANTÉM</b> — dentro da faixa → mesma carga, busque +1 rep por série.<br>
       🔴 <b>SEGURA/REDUZ</b> — série abaixo da faixa (com RIR 0 → recua um incremento).<br>
       🟣 <b>ESTAGNOU</b> — 3+ sessões sem progresso na mesma carga → microdeload de ~10% ou troca de exercício.</p>
@@ -874,6 +742,16 @@ function renderData(){
     toast('Reimportando tudo do Hevy…');
     const r=await hevySync(true);
     toast(r.err?'⚠️ Falha: '+r.err:'✓ '+r.shown+' rotina(s) e '+r.total+' treino(s) do Hevy');
+    renderData();
+  };
+  const hfs=document.getElementById('hvfolder');
+  if(hfs)hfs.onchange=async()=>{
+    diet.settings.hevyFolder=hfs.value===''?null:Number(hfs.value);
+    await saveDiet();
+    toast('Atualizando rotinas…');
+    const r=await hevySync(false);
+    if(r.err)toast('⚠️ Hevy: '+r.err);
+    else{await touchAndPush();toast('✓ '+r.shown+' rotina(s) nesta seleção')}
     renderData();
   };
   const ghs=document.getElementById('ghsave');
@@ -1762,7 +1640,7 @@ async function hevySync(full){
   })();
   try{return await hevyBusy}finally{hevyBusy=null}
 }
-/* faixa com a hora da última atualização e o botão ↻ (abas Progressão e Programa) */
+/* faixa com a hora da última atualização e o botão ↻ (aba Progressão) */
 function hevyBar(){
   if(!hevyKey)return '';
   const when=hevyLast?new Date(hevyLast).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
@@ -1772,7 +1650,6 @@ function bindHevyBar(){
   const b=document.getElementById('hvpull');
   if(!b)return;
   b.onclick=async()=>{
-    if(tab==='program')harvest();
     b.disabled=true;b.textContent='Atualizando…';
     const r=await hevySync(false);
     toast(r.err?'⚠️ Hevy: '+r.err:(r.n?'✓ '+r.n+' treino(s) novo(s) do Hevy':'✓ Hevy em dia'));
@@ -1808,7 +1685,7 @@ function pinInit(){
     }
   });
 }
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(tab==='program')harvest();tab=b.dataset.tab;render()});
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
 pinInit();
 </script>
 </body>
