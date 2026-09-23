@@ -219,7 +219,7 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
 <script>
 /* ============ state & storage ============ */
 const K_PROG='ul_program_v1', K_HIST='ul_history_v1', K_KEY='ul_apikey_v1', K_MODEL='ul_aimodel_v1', K_GH='ul_ghtoken_v1', K_GIST='ul_gist_v1', K_UPD='ul_updated_v1', K_DIET='ul_diet_v1', K_HEVY='ul_hevykey_v1', K_HSYNC='ul_hevysync_v1';
-let program=[], history=[], tab='home', selWorkout=null, memOnly=false, apiKey='', aiModel='gemini-2.5-flash', ghToken='', gistId='', updatedAt=0, syncState='', hevyKey='', hevyLast='';
+let program=[], history=[], tab='home', selWorkout=null, memOnly=false, apiKey='', aiModel='gemini-3.8-flash', ghToken='', gistId='', updatedAt=0, syncState='', hevyKey='', hevyLast='';
 let diet={entries:{},settings:{mode:'deficit',rate:0.4,protTarget:180,protPerKg:2.1,fatPct:25,tdee0:2820}}, dietRange=30, homeMonth=new Date(), homeSel=null;
 
 const uid=()=>Math.random().toString(36).slice(2,9);
@@ -268,7 +268,9 @@ async function boot(){
   program=await sGet(K_PROG)||[];
   history=await sGet(K_HIST)||[];
   apiKey=await sGet(K_KEY)||'';
-  aiModel=await sGet(K_MODEL)||'gemini-2.5-flash';
+  aiModel=await sGet(K_MODEL)||'gemini-3.8-flash';
+  /* migração única: modelo salvo da geração 1.x/2.x (2.0 já desativado; 2.5 era o padrão antigo) → novo padrão */
+  if(!(await sGet('ul_aimig_v1'))){if(/^gemini-(1|2)\./.test(aiModel)){aiModel='gemini-3.8-flash';await sSet(K_MODEL,aiModel)}await sSet('ul_aimig_v1',1)}
   ghToken=await sGet(K_GH)||'';
   gistId=await sGet(K_GIST)||'';
   updatedAt=await sGet(K_UPD)||0;
@@ -927,15 +929,36 @@ function download(name,content,type){
   a.download=name;a.click();URL.revokeObjectURL(a.href);
 }
 
-/* ============ AI analysis (Claude) ============ */
-let lastAI=null;
+/* ============ AI analysis (Gemini) ============ */
+let lastAI=null, aiBusy=false;
+const GEMINI_DEFAULT_MODEL='gemini-3.8-flash';
+const GEMINI_FALLBACK_MODELS=['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash'];
+const AI_TIMEOUT_MS=90000;
+const AI_MAX_TOKENS=8192; /* inclui os tokens de raciocínio do modelo — com limite baixo a resposta volta cortada ou vazia */
+function normalizeGeminiModel(model){
+  return String(model||'').trim().replace(/^models\//,'')||GEMINI_DEFAULT_MODEL;
+}
+function geminiModelCandidates(){
+  return [...new Set([normalizeGeminiModel(aiModel),...GEMINI_FALLBACK_MODELS])];
+}
+/* mesma regra do refAnalysis: carga de referência = moda das séries com reps (empate → maior);
+   peso em branco conta como 0 (peso corporal); back-offs/drops ficam fora */
+function aiReferenceSets(sets){
+  const wOf=s=>(s.w!=null&&s.w!=='')?+s.w:0;
+  const valid=(sets||[]).filter(s=>s&&s.r!=null&&s.r!=='');
+  if(!valid.length)return{weight:null,sets:[]};
+  const counts=new Map();
+  for(const s of valid){const k=wOf(s);counts.set(k,(counts.get(k)||0)+1)}
+  let ref=null,best=0;
+  for(const[k,c]of counts)if(c>best||(c===best&&k>ref)){best=c;ref=k}
+  return{weight:ref,sets:valid.filter(s=>wOf(s)===ref)};
+}
 function renderAI(){
   view.innerHTML=`
   <div class="card">
     <h3>Análise inteligente</h3>
-    <p class="note" style="margin:8px 0 12px">Envia um resumo do seu histórico para o <b>Gemini</b> e devolve uma leitura do progresso: estagnações, padrão de RIR, fadiga em déficit e ações concretas. Seus dados continuam salvos <b>apenas nesta página</b> — o modelo lê um recorte a cada análise e não guarda nada.</p>
+    <p class="note" style="margin:8px 0 12px">Envia ao <b>Gemini</b> um resumo do seu programa, histórico, RIR e dieta e devolve uma leitura do progresso: estagnações, padrão de RIR, fadiga e ações concretas. Seus dados continuam salvos só aqui — o modelo lê um recorte a cada análise.</p>
     <button class="btn" id="aigo">Analisar meu progresso</button>
-    <p class="note" style="margin-top:10px;font-size:12px;color:var(--faint)">Funciona em qualquer navegador (inclusive no arquivo local) — basta configurar a chave gratuita do Google AI Studio abaixo, uma única vez.</p>
   </div>
   <div class="card">
     <h3>Pergunta livre</h3>
@@ -946,33 +969,58 @@ function renderAI(){
   <div class="card">
     <details ${apiKey?'':'open'}>
       <summary>Chave do Gemini (Google AI Studio)</summary>
-      <p class="note" style="margin:8px 0 10px">Crie uma chave gratuita em <b>aistudio.google.com</b> → "Get API key", cole aqui e salve. O free tier cobre seu volume de uso com folga, e a análise funciona em qualquer navegador, inclusive no arquivo local. A chave fica guardada só no armazenamento desta página.</p>
-      <input type="text" id="aikey" placeholder="AIza..." value="${esc(apiKey||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
-      <div class="fld" style="margin-top:10px"><label>Modelo</label><input type="text" id="aimodel" value="${esc(aiModel)}" style="text-align:left;font-size:13px;padding:10px"></div>
+      <p class="note" style="margin:8px 0 10px">Crie uma chave gratuita em <b>aistudio.google.com</b> → "Get API key", cole aqui e toque em <b>Testar conexão</b>. A chave fica guardada só neste aparelho.</p>
+      <input type="password" id="aikey" placeholder="Chave da Gemini API" value="${esc(apiKey||'')}" autocomplete="off" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
+      <div class="fld" style="margin-top:10px"><label>Modelo</label><input type="text" id="aimodel" value="${esc(normalizeGeminiModel(aiModel))}" style="text-align:left;font-size:13px;padding:10px"></div>
+      <p class="note" style="margin-top:7px;font-size:11.5px;color:var(--faint)">Padrão: ${GEMINI_DEFAULT_MODEL}. Se o modelo não existir mais, ou estiver sem cota/sobrecarregado, o app tenta ${GEMINI_FALLBACK_MODELS.join(' → ')}.</p>
       <div class="row2" style="margin-top:10px">
         <button class="btn ghost" id="aikeysave">Salvar</button>
-        <button class="btn danger" id="aikeyclear">Remover</button>
+        <button class="btn ghost" id="aitest">Testar conexão</button>
       </div>
+      <button class="btn danger" id="aikeyclear" style="margin-top:10px">Remover chave</button>
     </details>
   </div>
   <div id="aires">${lastAI?`<div class="card"><h3>Última análise</h3><div class="ai-out">${lastAI}</div></div>`:''}</div>`;
   document.getElementById('aigo').onclick=()=>runAI(null);
   document.getElementById('aiask').onclick=()=>{const q=document.getElementById('aiq').value.trim();if(!q){toast('Escreva a pergunta primeiro');return}runAI(q)};
-  document.getElementById('aikeysave').onclick=async()=>{apiKey=document.getElementById('aikey').value.trim();aiModel=document.getElementById('aimodel').value.trim()||'gemini-2.5-flash';await sSet(K_KEY,apiKey);await sSet(K_MODEL,aiModel);toast(apiKey?'✓ Configuração salva':'Chave vazia')};
+  const saveCfg=async()=>{
+    apiKey=document.getElementById('aikey').value.trim();
+    aiModel=normalizeGeminiModel(document.getElementById('aimodel').value);
+    await sSet(K_KEY,apiKey);await sSet(K_MODEL,aiModel);
+  };
+  document.getElementById('aikeysave').onclick=async()=>{await saveCfg();toast(apiKey?'✓ Configuração salva':'Chave vazia')};
+  document.getElementById('aitest').onclick=async()=>{
+    await saveCfg();
+    if(!apiKey){toast('Informe a chave do Gemini');return}
+    if(aiBusy)return;
+    aiBusy=true;
+    const target=document.getElementById('aires');
+    target.innerHTML='<div class="card"><div class="note"><span class="spin"></span>Testando conexão com o Gemini…</div></div>';
+    try{
+      const before=aiModel;
+      const res=await geminiGenerateWithFallback('Teste técnico de conexão.','Responda somente com a palavra OK.');
+      await adoptModel(res);
+      target.innerHTML='<div class="card"><div class="note"><b>✓ Gemini conectado.</b><br><br>Modelo que respondeu: <span class="tag">'+esc(res.model)+'</span>'+(modelNote(before,res)?'<br><br>'+modelNote(before,res):'')+'</div></div>';
+      toast('✓ Conexão funcionando');
+    }catch(e){showGeminiError(target,e)}
+    finally{aiBusy=false}
+  };
   document.getElementById('aikeyclear').onclick=async()=>{apiKey='';await sSet(K_KEY,'');renderAI();toast('Chave removida')};
 }
 function buildContext(){
   const lines=[];
-  lines.push('Perfil do atleta: homem, 1,86m, ~86kg, ~21% BF, intermediário (1+ ano), natural, recomposição em déficit leve (~2500 kcal, 180g proteína/dia), trabalho sedentário. Objetivo: V-taper (latíssimo + deltoide lateral prioritários; perna em manutenção deliberada). Programa Upper/Lower 3x/semana com dupla progressão autorregulada (faixa de reps + RIR alvo; topo da faixa em todas as séries → sobe carga).');
+  lines.push('Perfil do atleta: homem, 1,86m, ~86kg e ~21% BF na avaliação inicial, intermediário (1+ ano), natural, trabalho sedentário, em recomposição corporal. Objetivo: V-taper (latíssimo + deltoide lateral prioritários; perna em manutenção deliberada). Dupla progressão autorregulada (faixa de reps + RIR alvo; topo da faixa em todas as séries → sobe carga). Em cada sessão abaixo aparece só a carga de referência (moda das séries de trabalho); back-offs/drops ficam de fora.');
   for(const wo of program){
     lines.push('\nTreino '+wo.name+':');
     for(const ex of wo.exercises){
       const prev=lastEntries(ex.id,8).reverse();
       const hist=prev.map(p=>{
-        const w=Math.max(...p.sets.map(s=>+s.w||0));
-        const reps=p.sets.filter(s=>s.r!=null).map(s=>s.r).join('/');
-        const rirs=p.sets.filter(s=>s.rir!=null).map(s=>s.rir).join('/');
-        return new Date(p.date).toLocaleDateString('pt-BR').slice(0,5)+': '+fmt(w)+'kg×'+reps+' (RIR '+(rirs||'?')+')';
+        const d=new Date(p.date).toLocaleDateString('pt-BR').slice(0,5);
+        const ref=aiReferenceSets(p.sets);
+        if(!ref.sets.length)return d+': sem séries válidas';
+        const reps=ref.sets.map(s=>s.r).join('/');
+        const rirs=ref.sets.filter(s=>s.rir!=null&&s.rir!=='').map(s=>s.rir).join('/');
+        return d+': '+(ref.weight?fmt(ref.weight)+'kg':'peso corporal')+'×'+reps+' (RIR '+(rirs||'?')+')';
       }).join(' | ');
       lines.push('- '+ex.name+' [alvo '+ex.sets+'×'+ex.repMin+'-'+ex.repMax+' RIR '+ex.rirMin+'-'+ex.rirMax+']: '+(hist||'sem registros ainda'));
     }
@@ -990,39 +1038,128 @@ function buildContext(){
   lines.push('\nTotal de sessões registradas: '+history.length+(dates.length?' | Últimas datas: '+dates.slice(-12).join(', '):''));
   return lines.join('\n');
 }
-async function runAI(question){
-  const target=document.getElementById('aires');
-  target.innerHTML='<div class="card"><div class="note"><span class="spin"></span>Analisando seu histórico…</div></div>';
-  const sys='Você é um coach de musculação baseado em evidências (Helms, Israetel, Schoenfeld). Responda em português brasileiro, direto e prático, em no máximo ~300 palavras. Aponte estagnações, padrões de RIR/fadiga e ações concretas com números. Use **negrito** e listas curtas quando ajudar. Não repita os dados de volta; interprete-os.';
-  const user=buildContext()+'\n\n'+(question?('Pergunta do atleta: '+question):'Faça uma análise do progresso: o que evolui, o que estagnou, padrão de RIR e risco de fadiga em déficit, e 2-3 ações concretas para as próximas 2 semanas.');
-  if(!apiKey){
-    target.innerHTML='<div class="card"><div class="note">Configure primeiro a <b>chave do Gemini</b> na seção abaixo (aistudio.google.com → Get API key, gratuita). Depois é só clicar de novo.</div></div>';
-    return;
-  }
+/* uma chamada ao endpoint REST generateContent (chave no header, não na URL) */
+async function geminiGenerate(model,systemText,userText){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),AI_TIMEOUT_MS);
   try{
-    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(aiModel)+':generateContent?key='+encodeURIComponent(apiKey),{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+      cache:'no-store',
+      signal:controller.signal,
       body:JSON.stringify({
-        system_instruction:{parts:[{text:sys}]},
-        contents:[{role:'user',parts:[{text:user}]}],
-        generationConfig:{maxOutputTokens:8192,temperature:0.6}
+        system_instruction:{parts:[{text:systemText}]},
+        contents:[{role:'user',parts:[{text:userText}]}],
+        generationConfig:{maxOutputTokens:AI_MAX_TOKENS} /* sem temperature: os modelos 3.x pedem o padrão */
       })
     });
+    const raw=await r.text(); /* lê como texto para não perder a mensagem de erro */
+    let data={};
+    try{data=raw?JSON.parse(raw):{}}catch(_){}
     if(!r.ok){
-      let detail='';try{const eb=await r.json();detail=eb?.error?.message||''}catch(_){}
-      throw new Error('HTTP '+r.status+(detail?' — '+detail.slice(0,180):''));
+      const detail=data?.error?.message||raw||r.statusText||'erro desconhecido';
+      const err=new Error('HTTP '+r.status+' — '+detail);
+      err.status=r.status;err.detail=detail;err.model=model;
+      throw err;
     }
-    const data=await r.json();
-    const text=(data.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('\n').trim();
-    if(!text)throw new Error(data.candidates?.[0]?.finishReason==='SAFETY'?'resposta bloqueada por filtro de segurança':'resposta vazia do modelo');
-    lastAI=mdToHtml(text);
-    target.innerHTML='<div class="card"><h3>'+(question?'Resposta':'Análise do progresso')+'</h3><div class="ai-out">'+lastAI+'</div></div>';
+    const cand=data.candidates?.[0];
+    const text=(cand?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('').trim();
+    const finish=cand?.finishReason||data.promptFeedback?.blockReason||'desconhecido';
+    if(!text){
+      const err=new Error('O Gemini respondeu sem texto (motivo: '+finish+').');
+      err.status=200;err.finish=finish;err.model=model;
+      throw err;
+    }
+    return{text,model,truncated:finish==='MAX_TOKENS'};
   }catch(e){
-    const diag=e&&e.message?esc(e.message):'erro de rede';
-    target.innerHTML='<div class="card"><div class="note"><b>Falha na chamada:</b> <span class="tag">'+diag+'</span><br><br>'
-      +'Confira: (1) a chave está correta e ativa no aistudio.google.com; (2) o nome do modelo existe — tente <span class="tag">gemini-2.5-flash</span> ou <span class="tag">gemini-2.0-flash</span>; (3) o limite do free tier não foi atingido (renova diariamente).'
-      +'</div></div>';
+    if(e?.name==='AbortError'){
+      const err=new Error('Sem resposta em '+(AI_TIMEOUT_MS/1000)+' s.');
+      err.network=true;err.timeout=true;
+      throw err;
+    }
+    /* o Safari devolve só "Load failed" quando a conexão não se completa */
+    if(e instanceof TypeError||/load failed|failed to fetch|network request failed/i.test(e?.message||'')){
+      const err=new Error('Falha de rede ao acessar a Gemini API ('+(e?.message||'sem detalhe')+').');
+      err.network=true;
+      throw err;
+    }
+    throw e;
+  }finally{
+    clearTimeout(timer);
+  }
+}
+/* tenta o modelo configurado e, se ele não existir mais ou estiver sem cota/sobrecarregado, os seguintes.
+   Chave inválida, permissão, rede e tempo esgotado não são mascarados: outro modelo não resolveria. */
+async function geminiGenerateWithFallback(systemText,userText){
+  const models=geminiModelCandidates();
+  let lastError=null, configuredGone=false;
+  for(const model of models){
+    try{
+      const res=await geminiGenerate(model,systemText,userText);
+      /* só grava outro modelo se o configurado deixou de existir; falta de cota é passageira */
+      res.persist=configuredGone;
+      return res;
+    }catch(e){
+      lastError=e;
+      const msg=String(e?.detail||e?.message||'').toLowerCase();
+      const gone=e?.status===404
+        ||(e?.status===400&&/model|not found|unsupported|not available|does not exist/.test(msg)&&!/api key/.test(msg))
+        ||(e?.status===403&&/model/.test(msg)&&!/api key/.test(msg));
+      const busy=e?.status===429||e?.status===500||e?.status===503||e?.status===504;
+      if(gone&&model===models[0])configuredGone=true;
+      if(gone||busy)continue;
+      throw e;
+    }
+  }
+  throw lastError||new Error('Nenhum modelo Gemini disponível.');
+}
+async function adoptModel(res){
+  if(res.persist&&res.model!==aiModel){aiModel=res.model;await sSet(K_MODEL,aiModel)}
+}
+function modelNote(before,res){
+  if(res.model===before)return '';
+  return res.persist
+    ?esc(before)+' não está mais disponível — o app passou a usar '+esc(res.model)+'.'
+    :esc(before)+' está sem cota ou sobrecarregado agora; esta resposta veio do '+esc(res.model)+' (a configuração foi mantida).';
+}
+function showGeminiError(target,e){
+  const st=e?.status||null;
+  const raw=e?.detail||e?.message||'erro desconhecido';
+  let title='Falha na chamada', hint='';
+  if(e?.timeout){title='Tempo esgotado';hint='O Gemini não respondeu em '+(AI_TIMEOUT_MS/1000)+' s. Tente de novo; se repetir, faça uma pergunta mais curta.'}
+  else if(e?.network){title='Falha de conexão';hint='A chamada não chegou ao fim. Causas comuns: internet instável, bloqueador de conteúdo/VPN, ou o app ter ido para segundo plano durante a análise (no iPhone isso derruba a conexão). Toque em "Testar conexão": se o teste passar e só a análise falhar, o problema é a duração da resposta, não a chave.'}
+  else if(st===400){title='Requisição rejeitada';hint=/api key/i.test(raw)?'A chave não foi aceita — gere uma nova no aistudio.google.com.':'Confira o nome do modelo configurado.'}
+  else if(st===401){title='Chave não autorizada';hint='Gere ou confira a chave no aistudio.google.com.'}
+  else if(st===403){title='Acesso negado';hint='A chave foi reconhecida, mas não tem permissão (revogada, com restrição de site/API ou projeto bloqueado). Confira no aistudio.google.com.'}
+  else if(st===404){title='Modelo não encontrado';hint='Nenhum destes modelos está disponível para a sua chave: '+geminiModelCandidates().join(', ')+'.'}
+  else if(st===429){title='Limite do free tier atingido';hint='Todos os modelos tentados estão sem cota agora. As cotas renovam — tente mais tarde.'}
+  else if(st>=500){title='Gemini temporariamente indisponível';hint='O servidor do Google está com erro ou sobrecarregado. Tente em alguns minutos.'}
+  else if(st===200){title='Resposta vazia';hint=e?.finish==='MAX_TOKENS'?'O raciocínio do modelo consumiu todo o limite de tokens antes do texto.':(/SAFETY|BLOCK|PROHIBITED/i.test(e?.finish||'')?'Resposta bloqueada pelo filtro de segurança do Google.':'')}
+  target.innerHTML='<div class="card"><div class="note"><b>'+esc(title)+'</b><br><br><span class="tag">'+esc(String(raw).slice(0,350))+'</span>'+(hint?'<br><br>'+esc(hint):'')+'</div></div>';
+}
+async function runAI(question){
+  const target=document.getElementById('aires');
+  if(!apiKey){
+    target.innerHTML='<div class="card"><div class="note">Configure primeiro a <b>chave do Gemini</b> na seção abaixo e toque em <b>Testar conexão</b>.</div></div>';
+    return;
+  }
+  if(aiBusy)return;
+  aiBusy=true;
+  target.innerHTML='<div class="card"><div class="note"><span class="spin"></span>Analisando seu histórico… mantenha o app aberto até terminar.</div></div>';
+  const sys='Você é um coach de musculação baseado em evidências (Helms, Israetel, Schoenfeld). Responda em português brasileiro, direto e prático, em no máximo ~300 palavras. Diferencie variação normal de estagnação real. Aponte estagnações, padrões de RIR/fadiga e ações concretas com números quando os dados permitirem. Use **negrito** e listas curtas quando ajudar. Não repita os dados de volta — interprete-os — e não invente nada que não esteja neles.';
+  try{
+    const user=buildContext()+'\n\n'+(question?('Pergunta do atleta: '+question):'Faça uma análise do progresso: o que evolui, o que estagnou, padrão de RIR e risco de fadiga em déficit, e 2-3 ações concretas para as próximas 2 semanas.');
+    const before=aiModel;
+    const res=await geminiGenerateWithFallback(sys,user);
+    await adoptModel(res);
+    lastAI=mdToHtml(res.text)+(res.truncated?'<p>⚠️ <i>Resposta cortada no limite de tokens — peça de novo ou faça uma pergunta mais específica.</i></p>':'');
+    const note=modelNote(before,res);
+    target.innerHTML='<div class="card"><h3>'+(question?'Resposta':'Análise do progresso')+'</h3><div class="sub">'+esc(res.model)+'</div>'+(note?'<p class="note" style="margin-top:6px;font-size:12px">'+note+'</p>':'')+'<div class="ai-out">'+lastAI+'</div></div>';
+  }catch(e){
+    showGeminiError(target,e);
+  }finally{
+    aiBusy=false;
   }
 }
 function mdToHtml(md){
