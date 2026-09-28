@@ -250,7 +250,10 @@ async function boot(){
   if(dd){diet.entries=dd.entries||{};diet.settings=Object.assign(diet.settings,dd.settings||{})}
   hevyKey=await sGet(K_HEVY)||'';
   hevyLast=await sGet(K_HSYNC)||'';
+  keysAt=Object.assign({hevy:0,gemini:0},await sGet(K_KEYAT)||{});
   if(ghToken&&gistId)await cloudPull();
+  if(secretsNote)toast(secretsNote);
+  if(secretsNeedPush)cloudPush(); /* chaves deste aparelho ainda não estão (ou estão mais velhas) na nuvem */
   hevyFolders=await sGet(K_HFOLD)||[];
   /* migração: exercícios sem tempo de descanso ganham um pela faixa de reps */
   for(const wo of program)for(const ex of wo.exercises){
@@ -260,7 +263,7 @@ async function boot(){
   render();
   if(hevyKey){
     const firstHv=!(await sGet(K_HV2));
-    if(firstHv)toast('Atualizando do Hevy…');
+    if(firstHv&&!secretsNote)toast('Atualizando do Hevy…');
     hevySync(false).then(r=>{
       if(r.err){toast('⚠️ Hevy: '+r.err);if(tab==='train')render();return}
       if(r.changed&&['home','train','data'].includes(tab))render();
@@ -291,6 +294,7 @@ async function cloudPull(){
     let content=f.content;
     if(f.truncated){const rr=await fetch(f.raw_url);content=await rr.text()}
     const data=JSON.parse(content);
+    await pullSecrets(data);
     if((data.updatedAt||0)>(updatedAt||0)){
       if(Array.isArray(data.program))program=data.program;
       if(Array.isArray(data.history))history=data.history;
@@ -307,7 +311,8 @@ async function cloudPush(){
   if(!ghToken)return;
   try{
     const payload={description:'Progressão de treino — dados (auto-sync)',public:false,files:{}};
-    payload.files[GIST_FILE]={content:JSON.stringify({program,history,diet,updatedAt})};
+    const secrets=await sealSecrets();
+    payload.files[GIST_FILE]={content:JSON.stringify({program,history,diet,updatedAt,...(secrets?{secrets}:{})})};
     let r;
     if(gistId){
       r=await fetch('https://api.github.com/gists/'+gistId,{method:'PATCH',headers:ghHeaders(),body:JSON.stringify(payload)});
@@ -334,6 +339,73 @@ async function touchAndPush(){
   updatedAt=Date.now();
   await sSet(K_UPD,updatedAt);
   if(ghToken)cloudPush();
+}
+/* ---- chaves do Hevy e do Gemini na nuvem ----
+   Vão para o Gist criptografadas (AES-GCM) com uma chave derivada do token do GitHub: num aparelho novo
+   basta colar o token. Quem tiver só o link do Gist não consegue ler as chaves. Cada chave leva a hora em
+   que foi salva, para a mais nova valer em todos os aparelhos (inclusive quando você troca ou remove uma). */
+const K_KEYAT='ul_keysat_v1';
+let keysAt={hevy:0,gemini:0}, remoteSecrets=null, remoteSecretVals=null, secretsNote='', secretsNeedPush=false;
+let _secKey=null,_secKeyTok='';
+const b64=buf=>btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64=str=>Uint8Array.from(atob(str),c=>c.charCodeAt(0));
+async function secretsKey(){
+  if(!ghToken||!(window.crypto&&crypto.subtle))return null;
+  if(_secKey&&_secKeyTok===ghToken)return _secKey;
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(ghToken),'PBKDF2',false,['deriveKey']);
+  _secKey=await crypto.subtle.deriveKey({name:'PBKDF2',salt:new TextEncoder().encode('progressao-treino/chaves/v1'),iterations:100000,hash:'SHA-256'},
+    base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+  _secKeyTok=ghToken;
+  return _secKey;
+}
+async function markKey(which){keysAt[which]=Date.now();await sSet(K_KEYAT,keysAt)}
+function mergedSecrets(){
+  const r=remoteSecretVals||{};
+  const o={hevyKey,hevyAt:keysAt.hevy||0,apiKey,apiAt:keysAt.gemini||0,aiModel};
+  if((r.hevyAt||0)>o.hevyAt||(!o.hevyKey&&r.hevyKey&&!o.hevyAt)){o.hevyKey=r.hevyKey||'';o.hevyAt=r.hevyAt||0}
+  if((r.apiAt||0)>o.apiAt||(!o.apiKey&&r.apiKey&&!o.apiAt)){o.apiKey=r.apiKey||'';o.apiAt=r.apiAt||0;o.aiModel=r.aiModel||aiModel}
+  return o;
+}
+async function sealSecrets(){
+  try{
+    const k=await secretsKey();
+    const v=mergedSecrets();
+    if(!k||(!v.hevyKey&&!v.apiKey&&!v.hevyAt&&!v.apiAt))return remoteSecrets; /* nada a enviar: preserva o que já está lá */
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},k,new TextEncoder().encode(JSON.stringify(v)));
+    return{v:1,iv:b64(iv),ct:b64(ct)};
+  }catch(e){return remoteSecrets}
+}
+async function openSecrets(blob){
+  try{
+    const k=await secretsKey();
+    if(!k||!blob||blob.v!==1)return null;
+    const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(blob.iv)},k,unb64(blob.ct));
+    return JSON.parse(new TextDecoder().decode(pt));
+  }catch(e){return null} /* cifrado com outro token */
+}
+/* recebe as chaves da nuvem: adota as mais novas (ou as que faltam neste aparelho) e marca se este aparelho
+   tem algo mais novo para enviar */
+async function pullSecrets(data){
+  remoteSecrets=data.secrets||null;
+  const s=data.secrets?await openSecrets(data.secrets):null;
+  remoteSecretVals=s;
+  const got=[];
+  if(s){
+    if((s.hevyAt||0)>(keysAt.hevy||0)||(!hevyKey&&s.hevyKey&&!keysAt.hevy)){
+      if((s.hevyKey||'')!==hevyKey){hevyKey=s.hevyKey||'';await sSet(K_HEVY,hevyKey);if(hevyKey)got.push('Hevy')}
+      keysAt.hevy=s.hevyAt||0;
+    }
+    if((s.apiAt||0)>(keysAt.gemini||0)||(!apiKey&&s.apiKey&&!keysAt.gemini)){
+      if((s.apiKey||'')!==apiKey){apiKey=s.apiKey||'';await sSet(K_KEY,apiKey);if(apiKey)got.push('Gemini')}
+      if(s.aiModel&&s.aiModel!==aiModel){aiModel=s.aiModel;await sSet(K_MODEL,aiModel)}
+      keysAt.gemini=s.apiAt||0;
+    }
+    await sSet(K_KEYAT,keysAt);
+  }
+  secretsNote=got.length?'🔑 Chave'+(got.length>1?'s':'')+' do '+got.join(' e do ')+' recebida'+(got.length>1?'s':'')+' da nuvem':'';
+  const r=s||{};
+  secretsNeedPush=!!(hevyKey||apiKey)&&(!s||(keysAt.hevy||0)>(r.hevyAt||0)||(keysAt.gemini||0)>(r.apiAt||0)||(!!hevyKey&&!r.hevyKey)||(!!apiKey&&!r.apiKey));
 }
 
 /* ============ progression algorithm ============ */
@@ -650,7 +722,7 @@ function renderData(){
   view.innerHTML=`
   <div class="card">
     <h3>☁️ Nuvem — sincronizar entre aparelhos</h3>
-    <p class="note" style="margin:8px 0 12px">Guarda seus dados num <b>Gist secreto</b> da sua conta GitHub. Ao salvar uma sessão → envia; ao abrir a página em qualquer aparelho → baixa a versão mais recente. Configure o mesmo token no iPhone e no Mac e os dados ficam idênticos nos dois.</p>
+    <p class="note" style="margin:8px 0 12px">Guarda seus dados num <b>Gist secreto</b> da sua conta GitHub e mantém iPhone e Mac iguais. <b>Num aparelho novo, cole só este token</b>: o app acha o Gist sozinho e traz treinos, dieta e as chaves do Hevy e do Gemini — as chaves vão <b>criptografadas com o seu token</b>, e quem tiver só o link do Gist não consegue lê-las. No iPhone, o app da tela de início e o Safari guardam dados separados: configure no que você usa.</p>
     <details ${ghToken?'':'open'}>
       <summary>${ghToken?'Token configurado — alterar':'Configurar token do GitHub'}</summary>
       <p class="note" style="margin:8px 0 10px">Crie em <b>github.com/settings/tokens</b> → "Generate new token (classic)" → marque só o escopo <span class="tag">gist</span> → sem expiração (ou longa). Cole abaixo:</p>
@@ -721,11 +793,12 @@ function renderData(){
   document.getElementById('expcsv').onclick=exportCSV;
   const hvs=document.getElementById('hevysave');
   if(hvs)hvs.onclick=async()=>{
-    hevyKey=document.getElementById('hevykey').value.trim();
-    await sSet(K_HEVY,hevyKey);
-    if(!hevyKey){hevyErr='';toast('Chave removida');renderData();return}
+    const nk=document.getElementById('hevykey').value.trim();
+    if(nk!==hevyKey){hevyKey=nk;await sSet(K_HEVY,hevyKey);await markKey('hevy')}
+    if(!hevyKey){hevyErr='';if(ghToken)cloudPush();toast('Chave removida');renderData();return}
     toast('Conectando ao Hevy…');
     const r=await hevySync(true);
+    if(ghToken)cloudPush();
     if(r.err)toast('⚠️ Falha: '+r.err);
     else toast('✓ Conectado — '+r.shown+' rotina(s) e '+r.total+' treino(s) do Hevy');
     renderData();
@@ -764,7 +837,9 @@ function renderData(){
     if(gistId)await cloudPull();
     if(!updatedAt)updatedAt=Date.now(),await sSet(K_UPD,updatedAt);
     await cloudPush();
+    if(secretsNote)toast(secretsNote);
     renderData();
+    if(hevyKey)hevySync(false).then(r=>{if(!r.err&&tab==='data')renderData()});
   };
   const ghy=document.getElementById('ghsync');
   if(ghy)ghy.onclick=async()=>{
@@ -938,9 +1013,11 @@ function renderAI(){
   document.getElementById('aigo').onclick=()=>runAI(null);
   document.getElementById('aiask').onclick=()=>{const q=document.getElementById('aiq').value.trim();if(!q){toast('Escreva a pergunta primeiro');return}runAI(q)};
   const saveCfg=async()=>{
+    const prevKey=apiKey;
     apiKey=document.getElementById('aikey').value.trim();
     aiModel=normalizeGeminiModel(document.getElementById('aimodel').value);
     await sSet(K_KEY,apiKey);await sSet(K_MODEL,aiModel);
+    if(apiKey!==prevKey){await markKey('gemini');if(ghToken)cloudPush()} /* leva a chave nova para os outros aparelhos */
   };
   document.getElementById('aikeysave').onclick=async()=>{await saveCfg();toast(apiKey?'✓ Configuração salva':'Chave vazia')};
   document.getElementById('aitest').onclick=async()=>{
@@ -961,7 +1038,7 @@ function renderAI(){
     }catch(e){w.stop();showGeminiError(target,e)}
     finally{w.stop();aiBusy=false}
   };
-  document.getElementById('aikeyclear').onclick=async()=>{apiKey='';await sSet(K_KEY,'');renderAI();toast('Chave removida')};
+  document.getElementById('aikeyclear').onclick=async()=>{apiKey='';await sSet(K_KEY,'');await markKey('gemini');if(ghToken)cloudPush();renderAI();toast('Chave removida')};
 }
 function buildContext(){
   const lines=[];
@@ -987,8 +1064,9 @@ function buildContext(){
   if(twd.length){
     lines.push('\nDieta: peso tendência atual '+tr[twd[twd.length-1]].toFixed(1)+' kg'
       +(wr!=null?' | ritmo '+(wr>0?'+':'')+wr.toFixed(2)+' kg/sem':'')
-      +(t?' | TDEE observado ~'+t.tdee+' kcal (média ingerida '+t.avgK+' kcal, janela '+t.days+'d)':' | TDEE ainda em calibração')
-      +' | objetivo: '+diet.settings.mode+' '+diet.settings.rate+' kg/sem | metas: '+tk.goal+' kcal, P '+MM.prot+'g / C '+MM.carbs+'g / G '+MM.fatG+'g');
+      +(t.observed!=null?' | gasto estimado ~'+t.tdee+' kcal (confiança '+Math.round(t.conf*100)+'%, média registrada '+t.avgK+' kcal, janela '+t.days+'d; na régua do registro)':(diet.settings.phase&&diet.settings.phase.prior!==diet.settings.tdee0?' | fase nova: gasto ancorado na fase anterior ~'+t.tdee+' kcal':' | gasto ainda em calibração (estimativa ~'+t.tdee+' kcal)'))
+      +' | objetivo: '+(diet.settings.mode==='fixed'?'meta fixa prescrita pela nutricionista':diet.settings.mode+(diet.settings.mode!=='maint'?' '+fmt(ratePct())+'% do peso/sem (~'+rateKg().toFixed(2)+' kg/sem)':''))
+      +' | metas: '+tk.goal+' kcal, P '+MM.prot+'g / C '+MM.carbs+'g / G '+MM.fatG+'g');
   }
   const dates=[...new Set(history.map(h=>new Date(h.date).toLocaleDateString('pt-BR')))];
   lines.push('\nTotal de sessões registradas: '+history.length+(dates.length?' | Últimas datas: '+dates.slice(-12).join(', '):''));
@@ -1181,10 +1259,18 @@ function mdToHtml(md){
 
 /* ============ diet / adaptive TDEE (MacroFactor-style) ============ */
 const KCAL_PER_KG=7700, EWMA_ALPHA=0.2;
+const TDEE_WINDOW=28;   /* dias de dados usados no gasto observado */
+const PRIOR_SD0=300;    /* incerteza da estimativa por fórmula, kcal/dia (equações acertam ±10% em ~80% das pessoas) */
+const SETTLE_DAYS=10;   /* dias de uma fase nova com peso reduzido: água, glicogênio e conteúdo intestinal mudam rápido */
+const NOISE_AC=1.5;     /* as oscilações de água duram alguns dias: aumenta a incerteza da inclinação (ruído autocorrelacionado) */
+const RATE_MAX={deficit:1,surplus:0.5}; /* % do peso por semana — Helms 2014 (déficit 0,5–1%) e Iraki 2019 (ganho 0,25–0,5%) */
+const TEF=0.1;          /* efeito térmico do alimento ≈10% das kcal: comer mais eleva um pouco o gasto (e vice-versa) */
+const DRIFT=30;         /* kcal/√dia: o gasto real muda com o tempo (adaptação, atividade) — a âncora perde força à medida que envelhece */
 async function saveDiet(){await sSet(K_DIET,diet)}
 const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 function dietDates(){return Object.keys(diet.entries).sort()}
-function computeTrend(){
+const dayNum=d=>Math.round(new Date(d).getTime()/864e5);
+function computeTrend(){ /* só para o gráfico e o painel; o gasto usa as pesagens do dia */
   const wd=dietDates().filter(d=>diet.entries[d].weight!=null&&diet.entries[d].weight!=='');
   const trend={};
   if(!wd.length)return trend;
@@ -1208,24 +1294,74 @@ function olsSlope(pairs){ /* regressão linear simples: [ [dias,y] ] → kg/dia 
   for(const[x,y]of pairs){num+=(x-mx)*(y-my);den+=(x-mx)*(x-mx)}
   return den?num/den:0;
 }
+function curWeight(){
+  const tr=computeTrend(), wd=Object.keys(tr).sort();
+  return wd.length?tr[wd[wd.length-1]]:((diet.settings.profile&&diet.settings.profile.w)||86);
+}
+/* ritmo-alvo em % do peso por semana, guardado por objetivo (déficit e superávit têm faixas diferentes);
+   migra o antigo "rate" em kg/sem; teto por objetivo */
+function ratePct(){
+  const s=diet.settings;
+  if(!s.ratePcts){
+    const legacy=s.ratePct!=null?+s.ratePct:(s.rate!=null?s.rate/curWeight()*100:null);
+    s.ratePcts={deficit:0.47,surplus:0.3};
+    if(legacy!=null&&(s.mode==='deficit'||s.mode==='surplus'))s.ratePcts[s.mode]=Math.round(legacy*100)/100;
+  }
+  const v=s.ratePcts[s.mode]??(s.mode==='surplus'?0.3:0.47);
+  return Math.min(RATE_MAX[s.mode]||1,Math.max(0.1,+v));
+}
+const rateKg=()=>ratePct()/100*curWeight();              /* kg/sem */
+const rateKcal=()=>rateKg()*KCAL_PER_KG/7;              /* kcal/dia de déficit ou superávit */
+/* Gasto (TDEE) por balanço energético — kcal registradas − variação do peso × 7.700 —, combinado com a
+   estimativa anterior pela precisão de cada um (média ponderada pelo inverso da variância):
+   · a inclinação vem de regressão ponderada nas pesagens do dia (a média móvel atrasa no começo e enviesava o gasto);
+   · a confiança cresce com a quantidade e a estabilidade dos dados, não com um prazo fixo;
+   · numa fase nova (troca de objetivo ou de meta), os dados anteriores saem da janela, os primeiros dias valem pouco
+     e a fase começa ancorada no gasto da fase anterior.
+   O número fica na régua do seu registro: se você registra sempre menos do que come, ele sai menor que o gasto
+   real, mas as metas continuam levando ao ritmo pedido. */
 function computeTDEE(){
-  const trend=computeTrend();
-  const wd=Object.keys(trend).sort();
-  if(wd.length<4)return null;
-  const end=wd[wd.length-1], endT=new Date(end).getTime();
-  const win=wd.filter(d=>(endT-new Date(d).getTime())/86400000<=27);
-  if(win.length<4)return null;
-  const days=(endT-new Date(win[0]).getTime())/86400000;
-  if(days<7)return null;
-  const kd=dietDates().filter(d=>d>=win[0]&&d<=end&&diet.entries[d].kcal!=null&&diet.entries[d].kcal!==''&&!diet.entries[d].inc);
-  if(kd.length<4)return null;
-  const slope=olsSlope(win.map(d=>[(new Date(d).getTime()-endT)/86400000,trend[d]])); /* kg/dia via regressão */
-  const avgK=kd.reduce((s,d)=>s+ +diet.entries[d].kcal,0)/kd.length;
+  const s=diet.settings, ph=s.phase||null;
+  const prior=ph&&ph.prior?+ph.prior:+s.tdee0, priorSD=ph&&ph.priorSD?+ph.priorSD:PRIOR_SD0;
+  const base={tdee:Math.round(prior),observed:null,conf:0,sd:Math.round(priorSD),avgK:null,days:0,nK:0,prior:Math.round(prior)};
+  const all=dietDates();
+  const wd=all.filter(d=>diet.entries[d].weight!=null&&diet.entries[d].weight!=='');
+  if(!wd.length)return base;
+  const endN=dayNum(wd[wd.length-1]);
+  const phN=ph&&ph.start?dayNum(ph.start):null;
+  const startN=Math.max(endN-(TDEE_WINDOW-1),phN??-Infinity);
+  const wOf=n=>{
+    if(phN==null)return 1;
+    const k=n-phN;
+    if(k<0)return 0;
+    if(k>=SETTLE_DAYS)return 1;
+    return k<4?0.1:0.1+0.9*(k-3)/(SETTLE_DAYS-3);
+  };
+  const pts=wd.filter(d=>dayNum(d)>=startN).map(d=>({x:dayNum(d)-endN,y:+diet.entries[d].weight,w:wOf(dayNum(d))})).filter(p=>p.w>0);
+  const kd=all.filter(d=>{const n=dayNum(d);return n>=startN&&n<=endN&&diet.entries[d].kcal!=null&&diet.entries[d].kcal!==''&&!diet.entries[d].inc});
+  const W=pts.reduce((a,p)=>a+p.w,0);
+  if(pts.length<4||W<2||kd.length<4)return base;
+  const mx=pts.reduce((a,p)=>a+p.w*p.x,0)/W, my=pts.reduce((a,p)=>a+p.w*p.y,0)/W;
+  let sxx=0,sxy=0;
+  for(const p of pts){sxx+=p.w*(p.x-mx)**2;sxy+=p.w*(p.x-mx)*(p.y-my)}
+  if(sxx/W<3)return base; /* dados espalhados por menos de ~6 dias */
+  const slope=sxy/sxx;
+  let sse=0;
+  for(const p of pts)sse+=p.w*(p.y-my-slope*(p.x-mx))**2;
+  const sig2=Math.max(sse/Math.max(1,W-2),0.15**2);
+  const seSlope=NOISE_AC*Math.sqrt(sig2/sxx);
+  const kw=kd.map(d=>({k:+diet.entries[d].kcal,w:wOf(dayNum(d))}));
+  const KW=kw.reduce((a,o)=>a+o.w,0);
+  const avgK=kw.reduce((a,o)=>a+o.w*o.k,0)/KW;
+  const varK=kw.reduce((a,o)=>a+o.w*(o.k-avgK)**2,0)/KW;
+  const nK=KW*KW/kw.reduce((a,o)=>a+o.w*o.w,0);
   const observed=avgK-slope*KCAL_PER_KG;
-  /* confiança cresce com nº de dias de kcal, nº de pesagens e amplitude da janela */
-  const conf=Math.min(1,kd.length/12)*Math.min(1,win.length/10)*Math.min(1,days/14);
-  const tdee=Math.round(conf*observed+(1-conf)*diet.settings.tdee0);
-  return{tdee,observed:Math.round(observed),conf,avgK:Math.round(avgK),days:Math.round(days),nK:kd.length};
+  const varObs=(seSlope*KCAL_PER_KG)**2+varK/Math.max(1,nK-1);
+  const age=Math.max(0,endN-(phN??dayNum(wd[0])));
+  const varPrior=priorSD*priorSD+DRIFT*DRIFT*age;
+  const conf=varPrior/(varPrior+varObs);
+  return{tdee:Math.round(conf*observed+(1-conf)*prior),observed:Math.round(observed),conf,
+    sd:Math.round(Math.sqrt(varPrior*varObs/(varPrior+varObs))),avgK:Math.round(avgK),days:Math.round(-pts[0].x),nK:kd.length,prior:Math.round(prior)};
 }
 function weeklyRate(){
   const trend=computeTrend();
@@ -1237,36 +1373,81 @@ function weeklyRate(){
   if((endT-new Date(win[0]).getTime())/86400000<5)return null;
   return olsSlope(win.map(d=>[(new Date(d).getTime()-endT)/86400000,trend[d]]))*7;
 }
+/* meta planejada para o objetivo atual, sem o amortecimento semanal */
+function planGoal(){
+  const s=diet.settings, t=computeTDEE();
+  if(s.mode==='fixed')return Math.round((s.fixed&&+s.fixed.kcal)||t.tdee);
+  const adj=rateKcal();
+  return Math.round(s.mode==='deficit'?t.tdee-adj:(s.mode==='surplus'?t.tdee+adj:t.tdee));
+}
+/* troca de fase: o gasto atual vira a âncora da fase nova (ajustado pelo efeito térmico da mudança de ingestão) */
+function startPhase(oldGoal,newGoal){
+  const t=computeTDEE(), s=diet.settings;
+  const shift=(oldGoal!=null&&newGoal!=null)?TEF*(newGoal-oldGoal):0;
+  s.phase={start:todayISO(),prior:Math.round(t.tdee+shift),priorSD:Math.round(Math.min(350,Math.max(120,t.sd+50)))};
+  s.lastCoach=null;
+}
+function phaseDay(){const ph=diet.settings.phase;return ph&&ph.start?dayNum(todayISO())-dayNum(ph.start):null}
 function targetKcal(){
-  const t=computeTDEE();
-  const base=t?t.tdee:diet.settings.tdee0;
-  const s=diet.settings;
-  const adj=s.rate*KCAL_PER_KG/7;
-  const raw=Math.round(s.mode==='deficit'?base-adj:(s.mode==='surplus'?base+adj:base));
+  const s=diet.settings, t=computeTDEE();
+  const base=t.tdee, observed=t.observed!=null;
+  if(s.mode==='fixed')return{goal:planGoal(),base,observed,next:null,changed:false,fixed:true};
+  const raw=planGoal();
   const today=todayISO();
-  if(!s.lastCoach||!s.lastCoach.goal){s.lastCoach={date:today,goal:raw};saveDiet();return{goal:raw,base,observed:!!t,next:7,changed:false}}
+  if(!s.lastCoach||!s.lastCoach.goal){s.lastCoach={date:today,goal:raw};saveDiet();return{goal:raw,base,observed,next:7,changed:false}}
   const daysSince=Math.floor((new Date(today)-new Date(s.lastCoach.date))/86400000);
   if(daysSince>=7){ /* check-in semanal: ajuste gradual, máx ±200 kcal por vez */
     const step=Math.max(-200,Math.min(200,raw-s.lastCoach.goal));
     const goal=s.lastCoach.goal+step;
     s.lastCoach={date:today,goal};saveDiet();
-    return{goal,base,observed:!!t,next:7,changed:step!==0};
+    return{goal,base,observed,next:7,changed:step!==0};
   }
-  return{goal:s.lastCoach.goal,base,observed:!!t,next:7-daysSince,changed:false};
+  return{goal:s.lastCoach.goal,base,observed,next:7-daysSince,changed:false};
 }
 function computeMacros(tk){
-  /* filosofia MacroFactor: proteína por kg de peso (tendência), gordura como piso (% kcal com mínimo em g/kg), carbo preenche o resto */
-  const tr=computeTrend(), wd=Object.keys(tr).sort();
-  const wkg=wd.length?tr[wd[wd.length-1]]:((diet.settings.profile&&diet.settings.profile.w)||86);
-  const s=diet.settings;
+  /* proteína por kg de peso (tendência), gordura como piso (% kcal com mínimo em g/kg), carbo preenche o resto.
+     Na meta fixa, valem os gramas prescritos; o que faltar é calculado pela mesma regra. */
+  const s=diet.settings, wkg=curWeight(), fx=s.mode==='fixed'&&s.fixed?s.fixed:{};
   const perKg=s.protPerKg||2.1, fatPct=s.fatPct||25;
-  const prot=Math.round(perKg*wkg);
-  let fatG=Math.round(tk.goal*fatPct/100/9);
-  const minFat=Math.round(0.6*wkg); /* piso hormonal ~0,6 g/kg */
-  if(fatG<minFat)fatG=minFat;
-  let carbs=Math.round((tk.goal-prot*4-fatG*9)/4);
+  const prot=fx.prot!=null?Math.round(+fx.prot):Math.round(perKg*wkg);
+  let fatG;
+  if(fx.fat!=null)fatG=Math.round(+fx.fat);
+  else{fatG=Math.round(tk.goal*fatPct/100/9);const minFat=Math.round(0.6*wkg);if(fatG<minFat)fatG=minFat} /* piso hormonal ~0,6 g/kg */
+  let carbs=fx.carb!=null?Math.round(+fx.carb):Math.round((tk.goal-prot*4-fatG*9)/4);
   if(carbs<0)carbs=0;
-  return{kcal:tk.goal,prot,fatG,carbs,wkg,pk:prot*4,fk:fatG*9,ck:carbs*4};
+  return{kcal:tk.goal,prot,fatG,carbs,wkg,pk:prot*4,fk:fatG*9,ck:carbs*4,prescribed:fx.prot!=null||fx.fat!=null||fx.carb!=null};
+}
+/* gasto em repouso para a estimativa inicial: Cunningham com % de gordura de exame (DEXA, Bod Pod, pesagem
+   hidrostática); sem ele, ten Haaf 2014 (peso, altura, idade, sexo) — as duas validadas em quem treina */
+function restingKcal(p){
+  if(p.bf!=null&&p.bf>0&&p.bf<60&&p.bfExam)return{kcal:500+22*(p.w*(1-p.bf/100)),eq:'Cunningham'};
+  return{kcal:11.936*p.w+587.728*(p.h/100)-8.129*p.age+191.027*(p.sex==='f'?0:1)+29.279,eq:'ten Haaf'};
+}
+/* "0,47% ≈ 0,40 kg/sem ≈ 440 kcal/dia" + avisos de ritmo */
+function rateInfo(pct){
+  const s=diet.settings, cap=RATE_MAX[s.mode]||1, v=Math.min(cap,Math.max(0.1,pct));
+  const kg=v/100*curWeight(), kcal=kg*KCAL_PER_KG/7;
+  let t='≈ '+fmt(kg.toFixed(2))+' kg/sem · ≈ '+fmt(Math.round(kcal))+' kcal/dia de '+(s.mode==='surplus'?'superávit':'déficit');
+  if(pct>cap)t+=' · <b>limitado ao teto de '+fmt(cap)+'%/sem</b>';
+  if(s.mode==='deficit'&&kcal>500)t+=' · acima de ~500 kcal/dia o ganho de massa magra tende a parar';
+  if(s.mode==='surplus'&&v<0.25)t+=' · abaixo de 0,25%/sem o ganho é bem conservador';
+  return t;
+}
+function dietCoach(t,tk,rate,nEntries){
+  const s=diet.settings, pd=phaseDay(), pct=Math.round(t.conf*100);
+  const w=curWeight();
+  let h;
+  if(s.mode==='fixed'){
+    const exp=(tk.goal-t.tdee)*7/KCAL_PER_KG;
+    h=`Meta fixa (nutricionista): <b>${fmt(tk.goal)} kcal/dia</b>. Com o gasto estimado de ~${fmt(t.tdee)} kcal${t.observed!=null?' (confiança '+pct+'%)':''}, o ritmo esperado é <b>${exp>0?'+':''}${fmt(exp.toFixed(2))} kg/sem</b> (${exp>0?'+':''}${fmt((exp/w*100).toFixed(2))}% do peso)${rate!=null?'; nas últimas 2 semanas foi '+(rate>0?'+':'')+fmt(rate.toFixed(2))+' kg/sem':''}.`;
+  }else if(t.observed!=null){
+    h=`Gasto: <b>~${fmt(t.tdee)} kcal/dia</b> (confiança ${pct}%, ±${fmt(t.sd)} kcal; média registrada ${fmt(t.avgK)} kcal em ${t.nK} dias, janela de ${t.days} dias). Meta para ${s.mode==='maint'?'manutenção':(s.mode==='deficit'?'déficit':'superávit')+' de '+fmt(ratePct())+'%/sem (≈ '+fmt(rateKg().toFixed(2))+' kg/sem)'}: <b>${fmt(tk.goal)} kcal/dia</b>${tk.changed?' — ajustada no check-in de hoje':(tk.next?' · próximo ajuste em '+tk.next+' dia(s)':'')}.`;
+  }else{
+    h=`Calibrando: registre <b>peso</b> e <b>kcal</b> todos os dias. Com ~1 semana de dados o gasto medido começa a entrar, e a confiança cresce conforme os dados ficam consistentes (em geral 3–4 semanas). Até lá a meta parte ${s.phase&&s.phase.prior!==s.tdee0?'do gasto da fase anterior':'da estimativa inicial'} (~${fmt(t.tdee)} kcal): <b>${fmt(tk.goal)} kcal/dia</b>. Registros com peso: ${nEntries}.`;
+  }
+  if(pd!=null&&pd<SETTLE_DAYS)h+=`<br><span style="font-size:12.5px">Fase nova há ${pd} dia${pd===1?'':'s'}: as pesagens dos primeiros ${SETTLE_DAYS} dias contam pouco (água e glicogênio mudam rápido) e o gasto parte do valor anterior (~${fmt(t.prior)} kcal).</span>`;
+  h+=`<br><span style="font-size:12px;color:var(--faint)">O gasto é medido na régua do seu registro: se você anota menos do que come, ele sai menor que o gasto real, mas as metas continuam levando ao ritmo pedido.</span>`;
+  return h;
 }
 function renderDiet(){
   const t=computeTDEE(), rate=weeklyRate(), tk=targetKcal(), trend=computeTrend();
@@ -1278,7 +1459,7 @@ function renderDiet(){
   const p=s.profile||{};
   const today=todayISO(), te=diet.entries[today]||{};
   const nEntries=dietDates().filter(d=>diet.entries[d].weight!=null).length;
-  const modeLabel={deficit:'Déficit',maint:'Manutenção',surplus:'Superávit'};
+  const modeLabel={deficit:'Déficit',maint:'Manutenção',surplus:'Superávit',fixed:'Meta fixa'};
   const rateOk=rate!=null&&curTrend?Math.abs(rate)/curTrend*100:null;
   view.innerHTML=`
   <div class="card">
@@ -1307,15 +1488,12 @@ function renderDiet(){
     <div class="statgrid">
       <div class="stat"><div class="v">${curTrend?fmt(curTrend.toFixed(2))+' kg':'—'}</div><div class="l">Peso (tendência)</div></div>
       <div class="stat"><div class="v ${rate!=null?(rate<0?'down':'up'):''}">${rate!=null?(rate>0?'+':'')+fmt(rate.toFixed(2))+' kg/sem':'—'}</div><div class="l">Ritmo atual</div></div>
-      <div class="stat"><div class="v acc">${t?fmt(t.tdee):'—'}</div><div class="l">TDEE observado</div></div>
+      <div class="stat"><div class="v acc">${fmt(t.tdee)}</div><div class="l">Gasto ${t.observed!=null?'estimado':(s.phase&&s.phase.prior!==s.tdee0?'(fase anterior)':'inicial')}</div></div>
       <div class="stat"><div class="v">${fmt(tk.goal)}</div><div class="l">Meta kcal (${modeLabel[s.mode]})</div></div>
       <div class="stat"><div class="v">${(curTrend&&first)?((curTrend-first>=0?'+':'')+fmt((curTrend-first).toFixed(1))+' kg'):'—'}</div><div class="l">Desde o início</div></div>
-      <div class="stat"><div class="v">${M.prot} g</div><div class="l">Proteína (${fmt(M.wkg>0?(diet.settings.protPerKg||2.1):0)} g/kg)</div></div>
+      <div class="stat"><div class="v">${M.prot} g</div><div class="l">Proteína (${s.mode==='fixed'&&s.fixed&&s.fixed.prot!=null?'prescrita':fmt(diet.settings.protPerKg||2.1)+' g/kg'})</div></div>
     </div>
-    <div class="coach">${
-      t?`TDEE: <b>~${fmt(t.tdee)} kcal/dia</b> (confiança ${(t.conf*100).toFixed(0)}%${t.conf<1?' — converge com mais registros':''}; média ingerida ${fmt(t.avgK)} kcal em ${t.nK} dias completos, janela ${t.days}d). Meta para ${modeLabel[s.mode].toLowerCase()}${s.mode!=='maint'?' de '+fmt(s.rate)+' kg/sem':''}: <b>${fmt(tk.goal)} kcal/dia</b>${tk.changed?' — ajustada no check-in de hoje':''}. Próximo check-in do coach: <b>${tk.next}d</b>.${rateOk!=null&&rateOk>0.75&&s.mode==='deficit'?' ⚠️ Ritmo acima de 0,75%/sem do peso — risco de perda de massa; reduza o déficit.':''}`
-      :`Calibrando: registre <b>peso diário</b> e <b>kcal</b>. O TDEE aparece com ~4 pesagens em 7+ dias e 4 dias completos de kcal, e ganha confiança até ~2-3 semanas. Meta atual (estimativa inicial de ${fmt(s.tdee0)} kcal): <b>${fmt(tk.goal)} kcal/dia</b>. Registros com peso: ${nEntries}.`
-    }</div>
+    <div class="coach">${dietCoach(t,tk,rate,nEntries)}</div>
   </div>
   <div class="card">
     <h3>Metas de macros — hoje</h3>
@@ -1344,21 +1522,29 @@ function renderDiet(){
   </div>
   <div class="card">
     <h3>Objetivo</h3>
-    <div class="modegrid">
+    <div class="modegrid" style="grid-template-columns:1fr 1fr">
       <button data-m="deficit" class="${s.mode==='deficit'?'on':''}">Déficit</button>
       <button data-m="maint" class="${s.mode==='maint'?'on':''}">Manutenção</button>
       <button data-m="surplus" class="${s.mode==='surplus'?'on':''}">Superávit</button>
+      <button data-m="fixed" class="${s.mode==='fixed'?'on':''}">Meta fixa</button>
     </div>
-    <div class="dgrid g3">
-      <div class="dfld"><label>Taxa (kg/sem)</label><input type="number" step="0.05" id="drate" value="${s.rate}" ${s.mode==='maint'?'disabled':''}></div>
+    ${s.mode==='fixed'?`<p class="note" style="margin:4px 0 10px;font-size:12.5px">Use a prescrição da nutricionista. O app continua medindo o seu gasto e o ritmo real, mas não mexe na meta.</p>
+    <div class="dgrid">
+      <div class="dfld"><label>Kcal/dia</label><input type="number" inputmode="numeric" id="fxk" value="${s.fixed&&s.fixed.kcal!=null?s.fixed.kcal:''}"></div>
+      <div class="dfld"><label>Proteína (g)</label><input type="number" inputmode="numeric" id="fxp" value="${s.fixed&&s.fixed.prot!=null?s.fixed.prot:''}" placeholder="auto"></div>
+      <div class="dfld"><label>Carboidrato (g)</label><input type="number" inputmode="numeric" id="fxc" value="${s.fixed&&s.fixed.carb!=null?s.fixed.carb:''}" placeholder="auto"></div>
+      <div class="dfld"><label>Gordura (g)</label><input type="number" inputmode="numeric" id="fxf" value="${s.fixed&&s.fixed.fat!=null?s.fixed.fat:''}" placeholder="auto"></div>
+    </div>
+    <p class="note" style="margin-top:8px;font-size:12px">Gramas em branco são calculados pelo app (proteína por kg e gordura em % das kcal, abaixo).</p>`:`<div class="dgrid">
+      <div class="dfld"><label>Ritmo (% do peso/sem)</label><input type="number" step="0.05" inputmode="decimal" id="drate" value="${s.mode==='maint'?'':ratePct()}" ${s.mode==='maint'?'disabled placeholder="—"':''}></div>
+      <div class="dfld"><label>TDEE inicial</label><input type="number" id="dtdee0" value="${s.tdee0}"></div>
+    </div>
+    <p class="note" id="rateinfo" style="margin-top:8px;font-size:12.5px">${s.mode==='maint'?'Manutenção: a meta acompanha o gasto estimado.':rateInfo(ratePct())}</p>`}
+    <div class="dgrid" style="margin-top:10px">
       <div class="dfld"><label>Prot. (g/kg)</label><input type="number" step="0.1" id="dpkg" value="${s.protPerKg||2.1}"></div>
       <div class="dfld"><label>Gord. (% kcal)</label><input type="number" step="1" id="dfat" value="${s.fatPct||25}"></div>
     </div>
-    <div class="dgrid" style="margin-top:10px">
-      <div class="dfld"><label>TDEE inicial</label><input type="number" id="dtdee0" value="${s.tdee0}"></div>
-      <div class="dfld"></div>
-    </div>
-    <p class="note" style="margin-top:8px;font-size:12px">Referências: recomposição = déficit 0,25-0,5 kg/sem · superávit magro = 0,1-0,25 kg/sem. O TDEE inicial só vale até o algoritmo convergir (~2-3 semanas).</p>
+    <p class="note" style="margin-top:8px;font-size:12px">Referências: na recomposição, déficits acima de ~500 kcal/dia anulam o ganho de massa magra (Murphy &amp; Koehler 2022) — no seu peso, ~0,5%/sem; secar mais rápido: 0,5–1%/sem (Helms 2014); ganho: 0,25–0,5%/sem (Iraki 2019). Tetos do app: 1%/sem no déficit e 0,5%/sem no superávit. Ao trocar de objetivo, os primeiros ${SETTLE_DAYS} dias contam pouco no gasto (água e glicogênio).</p>
     <details style="margin-top:10px">
       <summary>Calcular TDEE inicial (perfil + atividade)</summary>
       <div class="dgrid g3" style="margin-top:10px">
@@ -1379,8 +1565,9 @@ function renderDiet(){
           <option value="1.9" ${p.act==1.9?'selected':''}>Muito intenso — 2x/dia ou trabalho físico</option>
         </select>
       </div>
+      <label class="chkrow"><input type="checkbox" id="cBFx" ${p.bfExam?'checked':''}> % de gordura medido em exame (DEXA, Bod Pod ou pesagem hidrostática)</label>
       <button class="btn ghost" id="ccalc" style="margin-top:10px">Calcular e aplicar como TDEE inicial</button>
-      <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Com % de gordura preenchido usa Katch-McArdle (massa magra); sem, usa Mifflin-St Jeor. O resultado substitui o campo "TDEE inicial" e zera o check-in do coach.</p>
+      <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Com % de gordura de exame usa Cunningham (500 + 22 × massa magra); sem exame, ten Haaf (peso, altura, idade e sexo) — as duas validadas em quem treina. Bioimpedância e estimativa visual erram demais para a fórmula de massa magra valer a pena. A estimativa inicial só pesa até os seus dados assumirem (~3–4 semanas).</p>
     </details>
     <button class="btn ghost" id="dsetsave" style="margin-top:10px">Salvar objetivo</button>
   </div>
@@ -1419,20 +1606,42 @@ function renderDiet(){
     await saveDiet();await touchAndPush();
     toast('✓ Alimentação salva');renderDiet();
   };
-  view.querySelectorAll('.modegrid button').forEach(b=>b.onclick=async()=>{diet.settings.mode=b.dataset.m;diet.settings.lastCoach=null;await saveDiet();await touchAndPush();renderDiet()});
+  view.querySelectorAll('.modegrid button[data-m]').forEach(b=>b.onclick=async()=>{
+    const nm=b.dataset.m, s=diet.settings;
+    if(nm===s.mode)return;
+    const before=targetKcal().goal;
+    s.mode=nm;
+    if(nm==='fixed'&&!(s.fixed&&s.fixed.kcal))s.fixed={kcal:before,prot:null,carb:null,fat:null}; /* começa na meta atual */
+    startPhase(before,planGoal()); /* fase nova: âncora no gasto atual, primeiros dias com peso reduzido */
+    await saveDiet();await touchAndPush();renderDiet();
+    if(nm==='fixed')toast('Preencha a prescrição da nutricionista e salve');
+  });
+  const dr=document.getElementById('drate');
+  if(dr)dr.oninput=()=>{const v=numBR(dr.value);const ri=document.getElementById('rateinfo');if(ri&&v!=null)ri.innerHTML=rateInfo(Math.abs(v))};
   document.getElementById('dsetsave').onclick=async()=>{
-    const rv=numBR(document.getElementById('drate').value);
-    diet.settings.rate=Math.min(1.2,Math.max(0.1,rv!=null?Math.abs(rv):0.4));
-    const pk=numBR(document.getElementById('dpkg').value);
-    diet.settings.protPerKg=Math.min(3.5,Math.max(1.2,pk!=null?pk:2.1));
-    const fp=numBR(document.getElementById('dfat').value);
-    diet.settings.fatPct=Math.min(45,Math.max(15,fp!=null?fp:25));
-    const td=numBR(document.getElementById('dtdee0').value);
-    diet.settings.tdee0=td!=null&&td>800?Math.round(td):diet.settings.tdee0;
-    diet.settings.lastCoach=null;
-    diet.settings.protTarget=null;
+    const s=diet.settings, val=id=>{const el=document.getElementById(id);return el?numBR(el.value):undefined};
+    const before=targetKcal().goal;
+    if(s.mode==='fixed'){
+      const k=val('fxk');
+      if(k==null||k<800){toast('Informe as kcal/dia da prescrição');return}
+      const g=v=>v==null?null:Math.round(v);
+      s.fixed={kcal:Math.round(k),prot:g(val('fxp')),carb:g(val('fxc')),fat:g(val('fxf'))};
+    }else if(s.mode!=='maint'){
+      const rv=val('drate');
+      ratePct(); /* garante a migração */
+      if(rv!=null)s.ratePcts[s.mode]=Math.round(Math.min(RATE_MAX[s.mode]||1,Math.max(0.1,Math.abs(rv)))*100)/100;
+    }
+    s.rate=Math.round(rateKg()*100)/100; /* kg/sem equivalente, para versões antigas do app */
+    const pk=val('dpkg'); if(pk!==undefined)s.protPerKg=Math.min(3.5,Math.max(1.2,pk!=null?pk:2.1));
+    const fp=val('dfat'); if(fp!==undefined)s.fatPct=Math.min(45,Math.max(15,fp!=null?fp:25));
+    const td=val('dtdee0'); if(td!=null&&td>800)s.tdee0=Math.round(td);
+    const after=planGoal();
+    if(Math.abs(after-before)>=200)startPhase(before,after); /* mudança grande de ingestão = fase nova */
+    else s.lastCoach=null;
+    s.protTarget=null;
     await saveDiet();await touchAndPush();
-    toast('✓ Objetivo salvo — taxa '+fmt(diet.settings.rate)+' kg/sem');renderDiet();
+    toast('✓ Objetivo salvo — '+(s.mode==='fixed'?'meta fixa de '+fmt(s.fixed.kcal)+' kcal':s.mode==='maint'?'manutenção':fmt(ratePct())+'%/sem (≈ '+fmt(rateKg().toFixed(2))+' kg/sem)'));
+    renderDiet();
   };
   view.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{dietRange=+b.dataset.r;renderDiet()});
   const cc=document.getElementById('ccalc');
@@ -1440,18 +1649,17 @@ function renderDiet(){
     const age=numBR(document.getElementById('cAge').value), hcm=numBR(document.getElementById('cH').value), w=numBR(document.getElementById('cW').value);
     const bf=numBR(document.getElementById('cBF').value), sex=document.getElementById('cSex').value, act=+document.getElementById('cAct').value;
     if(!age||!hcm||!w){toast('Preencha idade, altura e peso');return}
-    let bmr;
-    if(bf!=null&&bf>0&&bf<60){
-      bmr=370+21.6*(w*(1-bf/100)); /* Katch-McArdle: massa magra */
-    }else{
-      bmr=sex==='f'?10*w+6.25*hcm-5*age-161:10*w+6.25*hcm-5*age+5; /* Mifflin-St Jeor */
-    }
-    const tdee=Math.round(bmr*act);
-    diet.settings.tdee0=tdee;
-    diet.settings.profile={age,h:hcm,w,bf:bf!=null?bf:null,sex,act};
-    diet.settings.lastCoach=null;
+    const bfExam=document.getElementById('cBFx').checked;
+    const prof={age,h:hcm,w,bf:bf!=null?bf:null,sex,act,bfExam};
+    const r=restingKcal(prof);
+    const tdee=Math.round(r.kcal*act);
+    const s=diet.settings, noData=computeTDEE().observed==null;
+    s.tdee0=tdee;
+    s.profile=prof;
+    if(noData&&s.phase)s.phase.prior=tdee; /* ainda sem dados: a fase atual parte da estimativa nova */
+    s.lastCoach=null;
     await saveDiet();await touchAndPush();
-    toast('✓ TDEE inicial: '+fmt(tdee)+' kcal/dia');
+    toast('✓ TDEE inicial ('+r.eq+'): '+fmt(tdee)+' kcal/dia');
     renderDiet();
   };
   view.querySelectorAll('.dhist .del').forEach(b=>b.onclick=async()=>{
