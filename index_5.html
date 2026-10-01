@@ -1,0 +1,2590 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Progressão — Upper/Lower 3×</title>
+<style>
+:root{
+  --bg:#101214; --surface:#1a1d21; --surface2:#22262b; --border:#2b3138;
+  --text:#e9ebee; --muted:#8b929b; --faint:#5c636c;
+  --up:#4ade80; --keep:#fbbf24; --hold:#f87171; --accent:#f5a623;
+  --radius:14px;
+  --mono:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding-bottom:90px}
+.wrap{max-width:640px;margin:0 auto;padding:0 14px}
+
+/* header */
+header{padding:22px 0 14px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--accent);text-transform:uppercase}
+h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-top:2px}
+h1 small{display:block;font-size:13px;font-weight:500;color:var(--muted);letter-spacing:0;margin-top:3px}
+.barload{display:flex;gap:3px;margin-top:12px;height:6px}
+.barload span{flex:1;border-radius:2px;background:var(--surface2)}
+.barload span.on{background:var(--accent)}
+
+/* tabs */
+nav{position:fixed;bottom:0;left:0;right:0;background:rgba(16,18,20,.96);backdrop-filter:blur(10px);border-top:1px solid var(--border);display:flex;z-index:50}
+nav button{flex:1;padding:13px 4px max(13px,env(safe-area-inset-bottom));background:none;border:none;color:var(--faint);font:600 12px/1 inherit;letter-spacing:.04em;cursor:pointer}
+nav button .ic{display:block;font-size:18px;margin-bottom:4px}
+nav button.active{color:var(--accent)}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.card h3{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.sub{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:2px}
+
+/* workout chips */
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.chip{padding:9px 16px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-weight:700;font-size:14px;cursor:pointer}
+.chip.sel{background:var(--accent);border-color:var(--accent);color:#131313}
+
+/* suggestion badge — plate edge signature */
+.decide{display:flex;align-items:center;gap:10px;margin:10px 0 12px;padding:9px 12px;border-radius:10px;background:var(--surface2);border-left:5px solid var(--faint);font-size:13px}
+.decide b{font-family:var(--mono);font-size:13px;letter-spacing:.06em}
+.decide.up{border-left-color:var(--up)} .decide.up b{color:var(--up)}
+.decide.keep{border-left-color:var(--keep)} .decide.keep b{color:var(--keep)}
+.decide.hold{border-left-color:var(--hold)} .decide.hold b{color:var(--hold)}
+.decide.stall{border-left-color:#c084fc} .decide.stall b{color:#c084fc}
+.decide.first{border-left-color:var(--faint)} .decide.first b{color:var(--muted)}
+
+/* set rows */
+.sethead,.setrow{display:grid;grid-template-columns:30px 1fr 1fr 1fr 44px;gap:8px;align-items:center}
+.lastline{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
+.hevybar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 14px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.card .hevybar{margin:12px 0 0}
+.rotline{font-size:12.5px;color:var(--muted);margin-top:8px}
+.rotline b{color:var(--accent)}
+.rotline.ok{color:var(--up)}
+.incsel{background:transparent;border:0;border-bottom:1px dashed currentColor;color:inherit;font:inherit;padding:0 1px;-webkit-appearance:none;appearance:none;cursor:pointer}
+.hevybar .mini{white-space:nowrap;padding:6px 0}
+.fld select{width:100%;padding:10px 8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font:600 13px inherit}
+
+.sethead{font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;padding:0 2px}
+.setrow{margin-bottom:8px}
+.setrow .n{font-family:var(--mono);font-size:13px;color:var(--faint);text-align:center}
+.setrow input{width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 16px var(--mono);text-align:center;-moz-appearance:textfield}
+.setrow input::-webkit-outer-spin-button,.setrow input::-webkit-inner-spin-button{-webkit-appearance:none}
+.setrow input:focus{outline:none;border-color:var(--accent)}
+.setrow input.done{border-color:#3a4a3f}
+
+/* buttons */
+.btn{display:block;width:100%;padding:15px;border:none;border-radius:12px;background:var(--accent);color:#131313;font:800 16px inherit;letter-spacing:.01em;cursor:pointer;margin-top:6px}
+.btn:active{transform:scale(.98)}
+.btn.ghost{background:var(--surface2);color:var(--text);font-weight:600;font-size:14px;padding:12px;border:1px solid var(--border)}
+.btn.danger{background:none;border:1px solid #4a2b2b;color:var(--hold)}
+.btn:disabled{opacity:.45}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* program editor */
+.exedit{background:var(--surface2);border-radius:10px;padding:12px;margin-top:10px}
+.exedit input[type=text]{width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font:600 14px inherit;margin-bottom:8px}
+.grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.fld label{display:block;font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+.fld input{width:100%;padding:9px 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font:600 14px var(--mono);text-align:center}
+.mini{background:none;border:none;color:var(--muted);font:600 13px inherit;cursor:pointer;padding:6px 8px}
+.mini.red{color:var(--hold)}
+.mini.up2{color:var(--accent)}
+.exhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.drag{color:var(--faint);font-size:15px}
+
+/* history */
+.hist{border-bottom:1px solid var(--border);padding:12px 2px}
+.hist:last-child{border:none}
+.hist .d{font-family:var(--mono);font-size:12px;color:var(--accent)}
+.hist .t{font-weight:700;margin:1px 0 4px}
+.hist .s{font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7}
+
+/* misc */
+.note{font-size:13px;color:var(--muted);line-height:1.55}
+.note b{color:var(--text)}
+details{margin-top:10px}
+summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--accent);list-style:none}
+summary::before{content:'▸ '}
+details[open] summary::before{content:'▾ '}
+details .note{margin-top:8px}
+/* AI */
+.ai-out{background:var(--surface2);border-radius:10px;padding:14px;margin-top:12px;font-size:14px;line-height:1.65}
+.ai-out p{margin:0 0 8px}
+.ai-out h4{font-size:14px;color:var(--accent);margin:10px 0 4px}
+.ai-out ul{margin:6px 0 10px 18px}
+.ai-out ol{margin:6px 0 10px 20px}
+.ai-out li{margin-bottom:4px}
+.ai-out li ul,.ai-out li ol{margin:4px 0 4px 14px}
+.ai-out h4:first-child{margin-top:0}
+.ai-out hr{border:0;border-top:1px solid var(--border);margin:12px 0}
+.ai-out code{font:12.5px var(--mono);background:var(--bg);padding:1px 4px;border-radius:4px}
+.ai-stuck{margin-top:12px;font-size:13px}
+.ai-tbl{overflow-x:auto;margin:6px 0 10px}
+.ai-out table{border-collapse:collapse;font-size:13px;line-height:1.45}
+.ai-out th,.ai-out td{border:1px solid var(--border);padding:5px 7px;text-align:left;vertical-align:top}
+.ai-out th{color:var(--accent);font-weight:600}
+textarea#aiq,textarea#aiabout{width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:inherit;resize:vertical;min-height:60px}
+textarea#aiq:focus,textarea#aiabout:focus{outline:none;border-color:var(--accent)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--faint);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* diet */
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.stat{background:var(--surface2);border-radius:10px;padding:11px 12px}
+.stat .v{font-family:var(--mono);font-size:19px;font-weight:700;letter-spacing:-.01em}
+.stat .l{font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.stat .v.up{color:var(--up)}.stat .v.down{color:var(--hold)}.stat .v.acc{color:var(--accent)}
+#dchart{width:100%;height:220px;display:block;margin-top:10px}
+.seg{display:flex;gap:6px;margin-top:10px}
+.seg button{flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font:700 12px inherit;cursor:pointer}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:#131313}
+.modegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.modegrid button{padding:11px 6px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font:700 13px inherit;cursor:pointer}
+.modegrid button.on{background:var(--accent);border-color:var(--accent);color:#131313}
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dgrid.g3{grid-template-columns:1fr 1fr 1fr}
+.dfld label{display:block;font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.dfld input{width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 16px var(--mono);text-align:center}
+.dfld input:focus{outline:none;border-color:var(--accent)}
+.chkrow{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted)}
+.chkrow input{width:18px;height:18px;accent-color:var(--accent)}
+.dhist{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:9px 2px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12.5px}
+.dhist:last-child{border:none}
+.dhist .dd{color:var(--accent)}
+.dhist .del{color:var(--hold);background:none;border:none;font-size:15px;cursor:pointer;padding:2px 6px}
+.warnline{color:var(--hold)}
+.coach{margin-top:12px;padding:12px;border-radius:10px;background:var(--surface2);border-left:5px solid var(--accent);font-size:13.5px;line-height:1.55}
+.coach b{font-family:var(--mono)}
+/* PIN lock */
+#lock{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px}
+#lock h2{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.pindots{display:flex;gap:14px}
+.pindots span{width:14px;height:14px;border-radius:50%;border:2px solid var(--faint)}
+.pindots span.f{background:var(--accent);border-color:var(--accent)}
+.pinpad{display:grid;grid-template-columns:repeat(3,72px);gap:12px}
+.pinpad button{height:64px;border-radius:16px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:700 22px var(--mono);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pinpad button:active{background:var(--surface2)}
+.pinpad button.ghostk{background:none;border:none;font-size:14px;color:var(--muted)}
+#lock.err .pindots{animation:shake .3s}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+/* dashboard */
+.calhead{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+.calhead .mname{font:700 15px inherit;text-transform:capitalize}
+.calhead button{width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;cursor:pointer}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:10px}
+.cal .dow{font-family:var(--mono);font-size:10px;color:var(--faint);text-align:center;text-transform:uppercase;padding:4px 0}
+.cal .day{aspect-ratio:1;border-radius:10px;background:var(--surface2);border:1.5px solid transparent;display:flex;align-items:center;justify-content:center;font:600 13px var(--mono);color:var(--muted);cursor:pointer;position:relative;-webkit-tap-highlight-color:transparent}
+.cal .day.blank{background:none;cursor:default}
+.cal .day.t{background:#2b2310;border-color:#5c4a15;color:var(--accent)}
+.cal .day .wdot{width:5px;height:5px;border-radius:50%;background:var(--up);position:absolute;bottom:5px;left:50%;transform:translateX(-50%)}
+.cal .day.today{border-color:var(--accent)}
+.cal .day.sel{outline:2px solid var(--accent);outline-offset:1px}
+.cal .day.future{opacity:.35;cursor:default}
+.legend{display:flex;gap:16px;margin-top:10px;font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+.legend .sq{display:inline-block;width:11px;height:11px;border-radius:3px;background:#2b2310;border:1.5px solid #5c4a15;vertical-align:-1px;margin-right:5px}
+.legend .dt{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--up);vertical-align:1px;margin-right:6px}
+.streakbig{display:flex;align-items:baseline;gap:8px}
+.streakbig .n{font:800 34px var(--mono);color:var(--accent)}
+.streakbig .u{font-size:12px;color:var(--muted)}
+#tonchart{width:100%;height:150px;display:block;margin-top:10px}
+.daydetail{margin-top:12px;background:var(--surface2);border-radius:10px;padding:12px;font-size:13.5px}
+.daydetail .dtitle{font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:6px}
+.daydetail .s{font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7}
+.macbar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin-top:12px;background:var(--bg)}
+.macbar span{height:100%}
+.m-p{background:#4ade80}.m-c{background:#f5a623}.m-f{background:#60a5fa}
+.maclegend{display:flex;gap:14px;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--muted);flex-wrap:wrap}
+.maclegend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px}
+.toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.empty{text-align:center;color:var(--faint);padding:30px 10px;font-size:14px}
+.tag{font-family:var(--mono);font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted)}
+.loading{text-align:center;padding:60px 0;color:var(--faint);font-family:var(--mono);font-size:13px;letter-spacing:.1em}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="lock">
+  <div class="eyebrow">Acesso restrito</div>
+  <h2>Digite o PIN</h2>
+  <div class="pindots"><span></span><span></span><span></span><span></span></div>
+  <div class="pinpad">
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+    <button class="ghostk" data-k="del">apagar</button><button data-k="0">0</button><button class="ghostk" style="visibility:hidden">·</button>
+  </div>
+</div>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Dupla progressão autorregulada</div>
+    <h1>Progressão de Carga <small>Upper · Lower · 3×/semana — V-taper</small></h1>
+    <div class="barload" id="weekbar"></div>
+  </header>
+  <main id="view"><div class="loading">CARREGANDO…</div></main>
+</div>
+
+<nav>
+  <button data-tab="home" class="active"><span class="ic">📊</span>Resumo</button>
+  <button data-tab="train"><span class="ic">📈</span>Progressão</button>
+  <button data-tab="diet"><span class="ic">⚖️</span>Dieta</button>
+  <button data-tab="ai"><span class="ic">🧠</span>Análise</button>
+  <button data-tab="data"><span class="ic">📤</span>Dados</button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ state & storage ============ */
+const K_PROG='ul_program_v1', K_HIST='ul_history_v1', K_KEY='ul_apikey_v1', K_MODEL='ul_aimodel_v1', K_GH='ul_ghtoken_v1', K_GIST='ul_gist_v1', K_UPD='ul_updated_v1', K_DIET='ul_diet_v1', K_HEVY='ul_hevykey_v1', K_HSYNC='ul_hevysync_v1';
+let program=[], history=[], tab='home', selWorkout=null, memOnly=false, apiKey='', aiModel='gemini-3.8-flash', ghToken='', gistId='', updatedAt=0, syncState='', hevyKey='', hevyLast='';
+let diet={entries:{},settings:{mode:'deficit',rate:0.4,protTarget:180,protPerKg:2.1,fatPct:25,tdee0:2820}}, dietRange=30, homeMonth=new Date(), homeSel=null;
+
+const uid=()=>Math.random().toString(36).slice(2,9);
+
+async function sGet(k){
+  if(window.storage){try{const r=await window.storage.get(k);return r?JSON.parse(r.value):null}catch(e){return null}}
+  try{const v=localStorage.getItem('pt_'+k);return v?JSON.parse(v):null}catch(e){return null}
+}
+async function sSet(k,v){
+  if(window.storage){try{await window.storage.set(k,JSON.stringify(v));return}catch(e){}}
+  try{localStorage.setItem('pt_'+k,JSON.stringify(v))}catch(e){memOnly=true}
+}
+
+async function boot(){
+  program=await sGet(K_PROG)||[];
+  history=await sGet(K_HIST)||[];
+  apiKey=await sGet(K_KEY)||'';
+  aiModel=await sGet(K_MODEL)||'gemini-3.8-flash';
+  /* migração única: modelo salvo da geração 1.x/2.x (2.0 já desativado; 2.5 era o padrão antigo) → novo padrão */
+  if(!(await sGet('ul_aimig_v1'))){if(/^gemini-(1|2)\./.test(aiModel)){aiModel='gemini-3.8-flash';await sSet(K_MODEL,aiModel)}await sSet('ul_aimig_v1',1)}
+  ghToken=await sGet(K_GH)||'';
+  gistId=await sGet(K_GIST)||'';
+  updatedAt=await sGet(K_UPD)||0;
+  const dd=await sGet(K_DIET);
+  if(dd){diet.entries=dd.entries||{};diet.settings=sanitizeSettings(Object.assign(diet.settings,dd.settings||{}))}
+  hevyKey=await sGet(K_HEVY)||'';
+  hevyLast=await sGet(K_HSYNC)||'';
+  keysAt=Object.assign({hevy:0,gemini:0},await sGet(K_KEYAT)||{});
+  if(ghToken&&gistId)await cloudPull();
+  if(secretsNote)toast(secretsNote);
+  if(secretsNeedPush)cloudPush(); /* chaves deste aparelho ainda não estão (ou estão mais velhas) na nuvem */
+  hevyFolders=await sGet(K_HFOLD)||[];
+  /* migração: exercícios sem tempo de descanso ganham um pela faixa de reps */
+  for(const wo of program)for(const ex of wo.exercises){
+    if(ex.rest==null)ex.rest=ex.repMin<=6?180:(ex.repMin<=8?150:(ex.repMin<=10?120:75));
+  }
+  selWorkout=program[0]?.id;
+  render();
+  if(hevyKey){
+    const firstHv=!(await sGet(K_HV2));
+    if(firstHv&&!secretsNote)toast('Atualizando do Hevy…');
+    hevySync(false).then(r=>{
+      if(r.err){toast('⚠️ Hevy: '+r.err);if(tab==='train')render();return}
+      if(r.changed&&['home','train','data'].includes(tab))render();
+      if(firstHv)toast('✓ Treinos e histórico agora vêm do Hevy — '+r.shown+' rotina(s)');
+      else if(r.n)toast('✓ '+r.n+' treino(s) novo(s) do Hevy');
+    });
+  }
+  if(memOnly)toast('⚠️ Sem armazenamento — dados só nesta sessão');
+}
+async function saveProgram(){await sSet(K_PROG,program)}
+async function saveHistory(){await sSet(K_HIST,history)}
+
+/* ============ cloud sync (GitHub Gist) ============ */
+const GIST_FILE='progressao-treino.json';
+const ghHeaders=()=>({'Authorization':'Bearer '+ghToken,'Accept':'application/vnd.github+json','Content-Type':'application/json'});
+async function cloudPull(){
+  try{
+    const r=await fetch('https://api.github.com/gists/'+gistId,{headers:ghHeaders()});
+    if(r.status===404){
+      gistId='';await sSet(K_GIST,'');
+      syncState='☁️ Gist não existe mais — um novo será criado no próximo salvamento';
+      return;
+    }
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const g=await r.json();
+    const f=g.files&&g.files[GIST_FILE];
+    if(!f)throw new Error('arquivo não encontrado no gist');
+    let content=f.content;
+    if(f.truncated){const rr=await fetch(f.raw_url);content=await rr.text()}
+    const data=JSON.parse(content);
+    await pullSecrets(data);
+    if((data.updatedAt||0)>(updatedAt||0)){
+      if(Array.isArray(data.program))program=data.program;
+      if(Array.isArray(data.history))history=data.history;
+      if(data.diet&&data.diet.entries){diet.entries=data.diet.entries;diet.settings=sanitizeSettings(Object.assign(diet.settings,data.diet.settings||{}))}
+      updatedAt=data.updatedAt||Date.now();
+      await sSet(K_PROG,program);await sSet(K_HIST,history);await sSet(K_DIET,diet);await sSet(K_UPD,updatedAt);
+      syncState='☁️ Baixado da nuvem — '+new Date(updatedAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    }else{
+      syncState='☁️ Local já está atualizado';
+    }
+  }catch(e){syncState='⚠️ Falha ao baixar: '+(e.message||'rede')}
+}
+async function cloudPush(){
+  if(!ghToken)return;
+  try{
+    const payload={description:'Progressão de treino — dados (auto-sync)',public:false,files:{}};
+    const secrets=await sealSecrets();
+    payload.files[GIST_FILE]={content:JSON.stringify({program,history,diet,updatedAt,...(secrets?{secrets}:{})})};
+    let r;
+    if(gistId){
+      r=await fetch('https://api.github.com/gists/'+gistId,{method:'PATCH',headers:ghHeaders(),body:JSON.stringify(payload)});
+      if(r.status===404){gistId='';await sSet(K_GIST,'')}
+    }
+    if(!gistId){
+      r=await fetch('https://api.github.com/gists',{method:'POST',headers:ghHeaders(),body:JSON.stringify(payload)});
+      if(r.ok){const g=await r.json();gistId=g.id;await sSet(K_GIST,gistId)}
+    }
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    syncState='☁️ Sincronizado às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){syncState='⚠️ Falha ao enviar: '+(e.message||'rede');toast('⚠️ Sync falhou — dados salvos localmente')}
+}
+async function findGist(){
+  try{
+    const r=await fetch('https://api.github.com/gists?per_page=100',{headers:ghHeaders()});
+    if(!r.ok)return;
+    const list=await r.json();
+    const hit=list.find(g=>g.files&&g.files[GIST_FILE]);
+    if(hit){gistId=hit.id;await sSet(K_GIST,gistId)}
+  }catch(e){}
+}
+async function touchAndPush(){
+  updatedAt=Date.now();
+  await sSet(K_UPD,updatedAt);
+  if(ghToken)cloudPush();
+}
+/* ---- chaves do Hevy e do Gemini na nuvem ----
+   Vão para o Gist criptografadas (AES-GCM) com uma chave derivada do token do GitHub: num aparelho novo
+   basta colar o token. Quem tiver só o link do Gist não consegue ler as chaves. Cada chave leva a hora em
+   que foi salva, para a mais nova valer em todos os aparelhos (inclusive quando você troca ou remove uma). */
+const K_KEYAT='ul_keysat_v1';
+let keysAt={hevy:0,gemini:0}, remoteSecrets=null, remoteSecretVals=null, secretsNote='', secretsNeedPush=false;
+let _secKey=null,_secKeyTok='';
+const b64=buf=>btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64=str=>Uint8Array.from(atob(str),c=>c.charCodeAt(0));
+async function secretsKey(){
+  if(!ghToken||!(window.crypto&&crypto.subtle))return null;
+  if(_secKey&&_secKeyTok===ghToken)return _secKey;
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(ghToken),'PBKDF2',false,['deriveKey']);
+  _secKey=await crypto.subtle.deriveKey({name:'PBKDF2',salt:new TextEncoder().encode('progressao-treino/chaves/v1'),iterations:100000,hash:'SHA-256'},
+    base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+  _secKeyTok=ghToken;
+  return _secKey;
+}
+async function markKey(which){keysAt[which]=Date.now();await sSet(K_KEYAT,keysAt)}
+function mergedSecrets(){
+  const r=remoteSecretVals||{};
+  const o={hevyKey,hevyAt:keysAt.hevy||0,apiKey,apiAt:keysAt.gemini||0,aiModel};
+  if((r.hevyAt||0)>o.hevyAt||(!o.hevyKey&&r.hevyKey&&!o.hevyAt)){o.hevyKey=r.hevyKey||'';o.hevyAt=r.hevyAt||0}
+  if((r.apiAt||0)>o.apiAt||(!o.apiKey&&r.apiKey&&!o.apiAt)){o.apiKey=r.apiKey||'';o.apiAt=r.apiAt||0;o.aiModel=r.aiModel||aiModel}
+  return o;
+}
+async function sealSecrets(){
+  try{
+    const k=await secretsKey();
+    const v=mergedSecrets();
+    if(!k||(!v.hevyKey&&!v.apiKey&&!v.hevyAt&&!v.apiAt))return remoteSecrets; /* nada a enviar: preserva o que já está lá */
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},k,new TextEncoder().encode(JSON.stringify(v)));
+    return{v:1,iv:b64(iv),ct:b64(ct)};
+  }catch(e){return remoteSecrets}
+}
+async function openSecrets(blob){
+  try{
+    const k=await secretsKey();
+    if(!k||!blob||blob.v!==1)return null;
+    const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(blob.iv)},k,unb64(blob.ct));
+    return JSON.parse(new TextDecoder().decode(pt));
+  }catch(e){return null} /* cifrado com outro token */
+}
+/* recebe as chaves da nuvem: adota as mais novas (ou as que faltam neste aparelho) e marca se este aparelho
+   tem algo mais novo para enviar */
+async function pullSecrets(data){
+  remoteSecrets=data.secrets||null;
+  const s=data.secrets?await openSecrets(data.secrets):null;
+  remoteSecretVals=s;
+  const got=[];
+  if(s){
+    if((s.hevyAt||0)>(keysAt.hevy||0)||(!hevyKey&&s.hevyKey&&!keysAt.hevy)){
+      if((s.hevyKey||'')!==hevyKey){hevyKey=s.hevyKey||'';await sSet(K_HEVY,hevyKey);if(hevyKey)got.push('Hevy')}
+      keysAt.hevy=s.hevyAt||0;
+    }
+    if((s.apiAt||0)>(keysAt.gemini||0)||(!apiKey&&s.apiKey&&!keysAt.gemini)){
+      if((s.apiKey||'')!==apiKey){apiKey=s.apiKey||'';await sSet(K_KEY,apiKey);if(apiKey)got.push('Gemini')}
+      if(s.aiModel&&s.aiModel!==aiModel){aiModel=s.aiModel;await sSet(K_MODEL,aiModel)}
+      keysAt.gemini=s.apiAt||0;
+    }
+    await sSet(K_KEYAT,keysAt);
+  }
+  secretsNote=got.length?'🔑 Chave'+(got.length>1?'s':'')+' do '+got.join(' e do ')+' recebida'+(got.length>1?'s':'')+' da nuvem':'';
+  const r=s||{};
+  secretsNeedPush=!!(hevyKey||apiKey)&&(!s||(keysAt.hevy||0)>(r.hevyAt||0)||(keysAt.gemini||0)>(r.apiAt||0)||(!!hevyKey&&!r.hevyKey)||(!!apiKey&&!r.apiKey));
+}
+
+/* ============ progression algorithm ============ */
+/* Dupla progressão autorregulada (Helms): faixa de reps + RIR alvo. A carga sobe quando as séries planejadas
+   dominam a faixa com o esforço da rotina; estagnação compara o desempenho por série (reps e, no empate, RIR).
+   Os números (3–4 sessões, recuo de ~10%, 6–8 semanas para deload) são regras práticas do app, não limiares
+   validados em estudo — por isso o recuo de carga só vem depois de queda ou de estagnação confirmada. */
+/* mesmo exercício do Hevy em treinos com faixa, RIR ou número de séries diferentes (ex.: puxada 3×6-8 num dia e
+   4×10-12 no outro) → cada treino usa só o próprio histórico; com o mesmo alvo, o histórico é compartilhado */
+function exScope(ex,wo){
+  if(!wo)return null;
+  for(const w2 of program)if(w2!==wo&&w2.exercises.some(e=>e.id===ex.id&&(e.repMin!==ex.repMin||e.repMax!==ex.repMax||e.rirMin!==ex.rirMin||e.rirMax!==ex.rirMax||e.sets!==ex.sets)))return wo;
+  return null;
+}
+function lastEntries(exId,n,wo){
+  const out=[];
+  for(let i=history.length-1;i>=0&&out.length<n;i--){
+    /* com escopo: sessões deste treino (pela rotina do Hevy ou, nas antigas, pelo nome do treino) */
+    if(wo&&history[i].workoutId!==wo.id&&history[i].workoutName!==wo.name)continue;
+    const e=history[i].entries.find(x=>x.exId===exId);
+    if(e&&e.sets.some(s=>s.w!=null||s.r!=null))out.push({date:history[i].date,sets:e.sets});
+  }
+  return out;
+}
+/* séries de trabalho de uma sessão: fora aquecimento e drop-set (tipos do Hevy). A carga de referência é a mais
+   pesada delas — back-offs e séries mais leves ficam fora da decisão e só aparecem contadas */
+function workSets(sets){
+  const all=(sets||[]).filter(s=>s&&s.r!=null&&s.r!=='');
+  const work=all.filter(s=>s.t!=='dropset'&&s.t!=='warmup');
+  if(!work.length)return{weight:null,sets:[],extra:all.length};
+  const wOf=s=>(s.w!=null&&s.w!=='')?+s.w:0;
+  const ref=Math.max(...work.map(wOf));
+  const at=work.filter(s=>wOf(s)===ref);
+  return{weight:ref,sets:at,extra:all.length-at.length,lighter:work.length-at.length};
+}
+/* RIR registrado; série marcada como falha no Hevy e sem RPE conta como RIR 0 */
+const rirOf=s=>(s.rir!=null&&s.rir!=='')?+s.rir:(s.t==='failure'?0:null);
+/* carga já usada neste exercício (existe no seu equipamento) */
+function usedLoads(exId){
+  const out=new Set();
+  for(const h of history){const e=h.entries.find(x=>x.exId===exId);if(e)for(const st of e.sets)if(st&&st.w!=null&&st.w!==''&&+st.w>0&&st.t!=='warmup')out.add(+st.w)}
+  return[...out];
+}
+/* alvo da decisão, a partir das séries planejadas na rotina do Hevy. Com cargas diferentes por série (top set +
+   back-offs), decide pelo grupo mais pesado, com a faixa e o RIR dele — os back-offs acompanham */
+function progTarget(ex){
+  const T={k:Math.max(1,ex.sets||1),lo:ex.repMin,hi:ex.repMax,rirMin:ex.rirMin,rirMax:ex.rirMax,multi:false,topW:ex.planW||null,rirSet:null};
+  const pl=Array.isArray(ex.plan)?ex.plan:null;
+  let grp=pl;
+  if(pl&&pl.length>1){
+    const ws=pl.map(p=>p.w);
+    if(ws.every(w=>w!=null&&w>0)&&new Set(ws).size>1){
+      const top=Math.max(...ws), g=pl.filter(p=>p.w===top);
+      grp=g;T.k=g.length;T.multi=true;T.topW=top;
+      const lo=g.map(p=>p.lo).filter(v=>v!=null), hi=g.map(p=>p.hi).filter(v=>v!=null);
+      if(lo.length)T.lo=Math.min(...lo);
+      if(hi.length)T.hi=Math.max(T.lo,...hi);
+      const rp=g.map(p=>p.rpe).filter(v=>v!=null&&v>0);
+      if(rp.length){T.rirMin=Math.max(0,10-Math.max(...rp));T.rirMax=Math.max(0,10-Math.min(...rp))}
+    }
+  }
+  /* RPE planejado série a série (ex.: 7/8/9): cada série é conferida com o próprio alvo, na ordem */
+  if(grp&&grp.length===T.k&&grp.some(p=>p.rpe!=null)){
+    const rs=grp.map(p=>p.rpe!=null?Math.max(0,10-p.rpe):null);
+    if(new Set(rs.filter(v=>v!=null)).size>1)T.rirSet=rs.map(v=>v??T.rirMin);
+  }
+  return T;
+}
+function refAnalysis(sets,ex){
+  const T=progTarget(ex), W=workSets(sets);
+  if(W.weight==null)return null;
+  const ev=W.sets, n=ev.length, complete=n>=T.k;
+  const evk=complete?ev.slice(0,T.k):ev; /* séries a mais na mesma carga não atrapalham: valem as planejadas */
+  const reps=evk.map(s=>+s.r);
+  const rirA=evk.map(rirOf), rirK=rirA.filter(v=>v!=null);
+  const flex=diet.settings.progMode==='flexivel';
+  /* flexível: todas as séries dentro da faixa e o total (cada série contada até o topo) a 1 do máximo —
+     reps além do topo não compensam uma série curta */
+  const repsTop=complete&&(flex
+    ?reps.every(r=>r>=T.lo)&&reps.reduce((a,r)=>a+Math.min(r,T.hi),0)>=T.k*T.hi-1
+    :reps.every(r=>r>=T.hi));
+  const tgt=i=>T.rirSet&&T.rirSet[i]!=null?T.rirSet[i]:T.rirMin;
+  const rirOk=rirA.every((v,i)=>v==null||v>=tgt(i));
+  const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+  return{
+    ref:W.weight,n,k:T.k,T,complete,
+    total:reps.reduce((a,b)=>a+b,0),
+    meanR:mean(reps),meanRIR:rirK.length===evk.length?mean(rirK):null,
+    top:repsTop&&rirOk,rirLow:repsTop&&!rirOk,
+    effortUnknown:rirK.length===0,effortPartial:rirK.length>0&&rirK.length<evk.length,known:rirK.length,
+    lighter:W.lighter,
+    anyBelow:reps.some(r=>r<T.lo),
+    ground:evk.some((s,i)=>+s.r<T.lo&&rirA[i]===0)
+  };
+}
+/* a sessão a rendeu mais que b? mais reps por série ou, com as mesmas reps, mais RIR sobrando */
+function perfBetter(a,b){
+  if(a.meanR>b.meanR+0.01)return true;
+  if(Math.abs(a.meanR-b.meanR)<=0.01&&a.meanRIR!=null&&b.meanRIR!=null)return a.meanRIR>b.meanRIR+0.01;
+  return false;
+}
+/* sessões seguidas na mesma carga de referência, sem bater o alvo (a mais recente primeiro) */
+function sameLoadRun(prev,ex,A){
+  const run=[A];
+  for(let i=1;i<prev.length;i++){
+    const P=refAnalysis(prev[i].sets,ex);
+    if(!P||P.ref!==A.ref||P.top)break;
+    if(P.complete)run.push(P); /* sessão incompleta não entra na comparação: média de menos séries não é comparável */
+  }
+  return run;
+}
+/* queda = 3 sessões seguidas piorando · longa = 4 sessões sem superar a mais antiga · possível = 3 sem evolução */
+function stallInfo(run){
+  if(run.length<3)return null;
+  const[a,b,c]=run;
+  if(perfBetter(b,a)&&perfBetter(c,b))return{kind:'queda',n:3};
+  if(perfBetter(a,c)||perfBetter(b,c))return null;
+  if(run.length>=4&&![a,b,c].some(x=>perfBetter(x,run[3])))return{kind:'longa',n:4};
+  return{kind:'possivel',n:3};
+}
+function suggest(ex,wo){
+  const prev=lastEntries(ex.id,6,exScope(ex,wo));
+  const T=progTarget(ex);
+  const firstMsg=T.topW
+    ?{type:'first',w:T.topW,label:'PRIMEIRA SESSÃO',msg:`Comece com a carga da rotina do Hevy e busque ${fmtR(T.lo,T.hi)} reps com RIR ${fmtR(T.rirMin,T.rirMax)}.`}
+    :{type:'first',w:null,label:'PRIMEIRA SESSÃO',msg:`Escolha uma carga que dê ${fmtR(T.lo,T.hi)} reps com RIR ${fmtR(T.rirMin,T.rirMax)}.`};
+  if(!prev.length)return firstMsg;
+  const A=refAnalysis(prev[0].sets,ex);
+  if(!A)return firstMsg;
+  const w=A.ref, bw=w===0; /* sem carga registrada = peso corporal (ex.: elevação de pernas no Hevy) */
+  const run=sameLoadRun(prev,ex,A), st=A.top||!A.complete?null:stallInfo(run); /* estagnação só com sessões completas */
+  const trail=st?' ('+run.slice(0,st.n).reverse().map(P=>fmt(Math.round(P.meanR*10)/10)).join(' → ')+' reps/série)':'';
+  const effort=A.effortUnknown?' <i>Esforço não informado</i>: sem RPE registrado no Hevy, o app não confere o RIR.'
+    :A.effortPartial?` <i>Esforço conferido só em ${A.known} de ${A.k} séries</i> — as outras estão sem RPE no Hevy.`:'';
+  const rirTgt=T.rirSet?'RIR '+T.rirSet.map(fmt).join('/')+' (série a série)':'RIR '+fmtR(T.rirMin,T.rirMax);
+  const boNote=T.multi&&A.lighter<ex.sets-T.k?` Back-offs registrados: ${A.lighter} de ${ex.sets-T.k} — a decisão vale pela série pesada, mas o volume planejado ficou incompleto.`:'';
+  const goal=diet.settings.progMode==='flexivel'?'todas as séries ficarem na faixa e o total chegar a 1 do máximo':'todas as séries baterem '+fmt(T.hi);
+  const rirTxt=rirTgt;
+  if(bw){
+    if(A.top)return{type:'up',w:null,label:'PROGRIDE',msg:'Faixa dominada com peso corporal — acrescente carga (anilha/colete) ou use uma variação mais difícil.'+effort};
+    if(A.rirLow)return{type:'hold',w:null,label:'SEGURA — RIR BAIXO',msg:`Bateu o topo, mas mais perto da falha que o alvo (${rirTxt}). Repita até fechar o topo com esse RIR.`};
+    if(A.ground)return{type:'hold',w:null,label:'SEGURA',msg:'Reps abaixo da faixa com RIR 0 — use uma variação mais fácil até dominar a faixa.'};
+    if(!A.complete)return{type:'hold',w:null,label:'SESSÃO INCOMPLETA',msg:`Só ${A.n} de ${A.k} séries na última sessão — complete as ${A.k} antes de progredir. Sessões incompletas não contam para estagnação.`};
+    if(st)return{type:st.kind==='possivel'?'hold':'stall',w:null,label:st.kind==='possivel'?'POSSÍVEL ESTAGNAÇÃO':(st.kind==='queda'?'QUEDA DE DESEMPENHO':'ESTAGNOU'),msg:`${st.n} sessões ${st.kind==='queda'?'seguidas caindo':'sem evolução'}${trail}. Desacelere a descida, acrescente carga ou troque a variação.`};
+    if(!A.complete)return{type:'hold',w:null,label:'SESSÃO INCOMPLETA',msg:`Só ${A.n} de ${A.k} séries na última sessão — complete as ${A.k} antes de progredir.`};
+    return{type:'keep',w:null,label:'MANTÉM — BUSCA REPS',msg:`Some reps até ${goal}.`};
+  }
+  const inc=incFor(ex,wo);
+  if(A.top&&inc>0){
+    const nw=round25(w+inc), big=inc/w>0.15;
+    return{type:'up',w:nw,label:'SOBE CARGA',msg:`Faixa dominada ${A.k===1?'na série'+(T.multi?' pesada':''):'nas '+A.k+' séries'+(T.multi?' pesadas':'')} com ${fmt(w)} kg → sobe para ${fmt(nw)} kg.`
+      +(T.multi?' Os back-offs acompanham a série pesada.':'')
+      +(big?` Degrau grande para essa carga (+${Math.round(inc/w*100)}%): se as reps despencarem, use microanilhas ou mude o incremento (toque em +${fmt(inc)} kg).`:'')+effort+boNote};
+  }
+  if(A.top)return{type:'up',w,label:'PROGRIDE',msg:'Faixa dominada — adicione 1 rep acima do topo ou reduza o RIR.'+effort+boNote};
+  if(A.rirLow)return{type:'hold',w,label:'SEGURA — RIR BAIXO',msg:`Bateu o topo (${fmt(T.hi)} reps), mas mais perto da falha que o alvo (${rirTxt}). Mantenha ${fmt(w)} kg até fechar o topo com esse RIR.`};
+  if(!A.complete){
+    if(A.ground)return{type:'hold',w:round25(Math.max(0,w-inc)),label:'SEGURA / REDUZ',msg:`Reps abaixo da faixa com RIR 0 → recue ${fmt(inc)} kg e domine a faixa.`};
+    return{type:'hold',w,label:'SESSÃO INCOMPLETA',msg:`Só ${A.n} de ${A.k} séries com ${fmt(w)} kg na última sessão — mantenha ${fmt(w)} kg e complete as ${A.k} na faixa antes de subir. Sessões incompletas não contam para estagnação.`};
+  }
+  if(st&&st.kind!=='possivel'){
+    const d=backoffW(w,inc,usedLoads(ex.id)), queda=st.kind==='queda';
+    const why=queda?`3 sessões seguidas caindo com ${fmt(w)} kg${trail} — sinal de fadiga.`:`4 sessões com ${fmt(w)} kg sem evolução${trail}.`;
+    const what=d!=null?`Recue para ${fmt(d)} kg (~${Math.round((1-d/w)*100)}%) e reconstrua`:`O degrau de carga (+${fmt(inc)} kg) é grande demais para recuar ~10%: mantenha ${fmt(w)} kg com 1 série a menos nesta semana`;
+    return{type:'stall',w:d??w,label:queda?'QUEDA DE DESEMPENHO':'ESTAGNOU — MICRODELOAD',msg:`${why} ${what}${queda?'; confira sono, déficit calórico e volume da semana.':', ou troque a variação do exercício.'}`};
+  }
+  if(A.ground)return{type:'hold',w:round25(Math.max(0,w-inc)),label:'SEGURA / REDUZ',msg:`Reps abaixo da faixa com RIR 0 → recue ${fmt(inc)} kg e domine a faixa.`};
+  if(st)return{type:'hold',w,label:'POSSÍVEL ESTAGNAÇÃO',msg:`3 sessões com ${fmt(w)} kg sem evolução${trail}. Mantenha a carga; se a próxima também não evoluir, o app sugere recuar ~10%. Sono, déficit e descanso entre séries pesam aqui.`};
+  if(!A.complete)return{type:'hold',w,label:'SESSÃO INCOMPLETA',msg:`Só ${A.n} de ${A.k} séries com ${fmt(w)} kg na última sessão — mantenha ${fmt(w)} kg e complete as ${A.k} na faixa antes de subir.`};
+  if(A.anyBelow)return{type:'hold',w,label:'SEGURA CARGA',msg:'Série de trabalho abaixo da faixa — mantenha o peso até entrar na faixa completa.'};
+  const growing=run.length>=2&&perfBetter(run[0],run[1]);
+  return{type:'keep',w,label:'MANTÉM — BUSCA REPS',msg:`Mantenha ${fmt(w)} kg e some reps até ${goal}.${growing?' Melhor que a sessão anterior — no caminho certo.':''}`};
+}
+/* semanas com treino desde o último deload marcado ou desde a última pausa de 7+ dias (pausa também descansa) */
+function deloadInfo(){
+  const ts=history.map(h=>new Date(h.date).getTime()).filter(t=>!isNaN(t)).sort((a,b)=>a-b);
+  if(!ts.length)return null;
+  const WK=7*864e5;
+  if(Date.now()-ts[ts.length-1]>=WK)return{weeks:0,pause:true};
+  let start=ts[0];
+  const ld=diet.settings.lastDeload?new Date(diet.settings.lastDeload+'T12:00:00').getTime():null;
+  if(ld&&ld>start)start=ld;
+  for(let i=1;i<ts.length;i++)if(ts[i]-ts[i-1]>=WK&&ts[i]>start)start=ts[i];
+  const wk=t=>{const d=new Date(t);d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7));return d.getTime()};
+  return{weeks:new Set(ts.filter(t=>t>=start).map(wk)).size,since:start,pause:false};
+}
+/* aviso de deload: pelo desempenho (exercícios caindo/estagnados) depois de 6+ semanas; com 8+ semanas, só lembrete */
+function deloadBanner(){
+  const dl=deloadInfo();
+  if(!dl||dl.pause||dl.weeks<6)return null;
+  const strong=new Set(), weak=new Set();
+  for(const w of program)for(const ex of w.exercises){const s=suggest(ex,w);if(s.type==='stall')strong.add(ex.id);else if(s.label==='POSSÍVEL ESTAGNAÇÃO')weak.add(ex.id)}
+  const n=new Set([...strong,...weak]).size;
+  if(strong.size||n>=2)return{kind:'sugerido',weeks:dl.weeks,n};
+  if(dl.weeks>=8)return{kind:'lembrete',weeks:dl.weeks,n};
+  return null;
+}
+const round25=v=>Math.round(v/0.25)*0.25;
+/* recuo de ~10%: de preferência uma carga que você já usou neste exercício (existe no equipamento); senão, degraus
+   a partir da carga atual (carga − n × incremento) — não múltiplos a partir de zero. null se não houver recuo razoável */
+function backoffW(w,inc,used){
+  const lo=w*0.75, target=w*0.9;
+  const c=(used||[]).filter(x=>x<w&&x>=lo);
+  if(c.length)return c.reduce((a,b)=>Math.abs(b-target)<Math.abs(a-target)?b:a);
+  const st=inc>0?inc:2.5, n=Math.max(1,Math.round(w*0.1/st)), d=round25(w-n*st);
+  return d>=lo&&d>0?d:null;
+}
+const fmt=v=>(+v).toLocaleString('pt-BR',{maximumFractionDigits:2});
+const fmtR=(a,b)=>fmt(a)+(b!=null&&+b!==+a?'–'+fmt(b):''); /* faixa: "8–10", "1,5–2" ou "2" */
+/* incremento de carga: o que você definir no app vale primeiro. No automático, o app usa o salto que você costuma
+   dar ao progredir neste exercício: só aumentos para uma carga nova (acima das 3 sessões anteriores), no mesmo
+   contexto (mesma rotina quando as faixas diferem) e repetidos pelo menos 2 vezes. É um salto observado — não
+   prova o menor degrau do aparelho; para isso, defina o incremento à mão. Sem esse padrão, um valor padrão */
+function incInfo(ex,auto,wo){
+  const ov=!auto&&diet.settings.incOverride?+diet.settings.incOverride[ex.id]:0;
+  if(ov>0)return{v:ov,src:'definido'};
+  const sc=wo?exScope(ex,wo):null, ws=[];
+  for(const h of history){
+    if(sc&&h.workoutId!==sc.id&&h.workoutName!==sc.name)continue;
+    const e=h.entries.find(x=>x.exId===ex.id);
+    if(e){const r=workSets(e.sets);if(r.weight)ws.push(r.weight)}
+  }
+  const cnt={};
+  for(let i=1;i<ws.length;i++){
+    const prevMax=Math.max(...ws.slice(Math.max(0,i-3),i)), d=round25(ws[i]-prevMax);
+    if(d>=0.5&&d<=10)cnt[d]=(cnt[d]||0)+1;
+  }
+  let best=null,bc=0;
+  for(const k in cnt)if(cnt[k]>bc||(cnt[k]===bc&&+k<best)){bc=cnt[k];best=+k}
+  if(best&&bc>=2)return{v:best,src:'seus aumentos'};
+  if(/dumbbell|halter/i.test(ex.name))return{v:2,src:'padrão'};
+  return{v:ex.inc>0?ex.inc:(ex.repMin<=8?2.5:1.25),src:'padrão'};
+}
+const incFor=(ex,wo)=>incInfo(ex,false,wo).v;
+const INC_STEPS=[0.5,1,1.25,2,2.5,4,5];
+
+/* ============ render ============ */
+const view=document.getElementById('view');
+function render(){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  const sm=document.querySelector('h1 small');
+  if(sm)sm.textContent=program.length?program.map(w=>w.name).join(' · ')+' — do Hevy':'Treino do Hevy';
+  weekbar();
+  if(tab==='home')renderHome();
+  else if(tab==='train')renderTrain();
+  else if(tab==='diet')renderDiet();
+  else if(tab==='ai')renderAI();
+  else renderData();
+}
+function weekbar(){
+  const el=document.getElementById('weekbar');el.innerHTML='';
+  const now=new Date();const monday=new Date(now);monday.setDate(now.getDate()-((now.getDay()+6)%7));monday.setHours(0,0,0,0);
+  const count=history.filter(h=>new Date(h.date)>=monday).length;
+  for(let i=0;i<3;i++){const s=document.createElement('span');if(i<count)s.className='on';el.appendChild(s)}
+}
+
+/* ---- HOME / DASHBOARD ---- */
+function dISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function sessionsByDay(){const m={};for(const s of history){const k=dISO(new Date(s.date));(m[k]=m[k]||[]).push(s)}return m}
+function weightStreak(){
+  let n=0, d=new Date();
+  const has=k=>{const e=diet.entries[k];return e&&e.weight!=null&&e.weight!==''};
+  if(!has(dISO(d)))d.setDate(d.getDate()-1); /* hoje ainda não pesou não quebra a sequência */
+  while(has(dISO(d))){n++;d.setDate(d.getDate()-1)}
+  return n;
+}
+function trainWeekStreak(sbd){
+  /* semanas consecutivas (terminando na atual ou anterior) com 3+ treinos */
+  const mon=d=>{const m=new Date(d);m.setDate(m.getDate()-((m.getDay()+6)%7));m.setHours(0,0,0,0);return m};
+  const cnt=ws=>{const we=new Date(ws.getTime()+6048e5);return history.filter(h=>{const t=new Date(h.date);return t>=ws&&t<we}).length};
+  let w=mon(new Date()), n=0;
+  if(cnt(w)>=3){n++;}
+  w=new Date(w.getTime()-6048e5);
+  while(cnt(w)>=3){n++;w=new Date(w.getTime()-6048e5)}
+  return n;
+}
+function renderHome(){
+  const sbd=sessionsByDay();
+  const now=new Date(), tI=todayISO();
+  const mon=new Date(now);mon.setDate(now.getDate()-((now.getDay()+6)%7));mon.setHours(0,0,0,0);
+  const weekN=history.filter(h=>new Date(h.date)>=mon).length;
+  const y=homeMonth.getFullYear(), mo=homeMonth.getMonth();
+  const mPrefix=y+'-'+String(mo+1).padStart(2,'0');
+  const monthTrains=Object.keys(sbd).filter(k=>k.startsWith(mPrefix)).length;
+  const monthWeighs=dietDates().filter(k=>k.startsWith(mPrefix)&&diet.entries[k].weight!=null&&diet.entries[k].weight!=='').length;
+  const wstreak=weightStreak(), tstreak=trainWeekStreak(sbd);
+  const setsWeek=history.filter(h=>new Date(h.date)>=mon).reduce((s,h)=>s+h.entries.reduce((a,e)=>a+e.sets.filter(x=>x.r!=null).length,0),0);
+  const firstDow=(new Date(y,mo,1).getDay()); /* 0=domingo */
+  const dim=new Date(y,mo+1,0).getDate();
+  const mname=homeMonth.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  let cal='';
+  for(const dw of['D','S','T','Q','Q','S','S'])cal+=`<div class="dow">${dw}</div>`;
+  for(let i=0;i<firstDow;i++)cal+='<div class="day blank"></div>';
+  for(let d=1;d<=dim;d++){
+    const k=mPrefix+'-'+String(d).padStart(2,'0');
+    const trained=!!sbd[k];
+    const weighed=diet.entries[k]&&diet.entries[k].weight!=null&&diet.entries[k].weight!=='';
+    const isToday=k===tI, isFuture=k>tI;
+    cal+=`<div class="day${trained?' t':''}${isToday?' today':''}${k===homeSel?' sel':''}${isFuture?' future':''}" data-day="${k}">${d}${weighed?'<span class="wdot"></span>':''}</div>`;
+  }
+  let detail='';
+  if(homeSel){
+    const ss=sbd[homeSel]||[];
+    const de=diet.entries[homeSel];
+    const dLabel=homeSel.split('-').reverse().join('/');
+    let body='';
+    for(const s of ss){
+      body+=`<div style="margin-bottom:6px"><b>🏋️ ${esc(s.workoutName)}</b><div class="s">${s.entries.map(e=>{const v=e.sets.filter(x=>x.r!=null);const w=Math.max(...v.map(x=>+x.w||0));return esc(e.exName.split('(')[0].trim())+' — '+fmt(w)+'kg × '+v.map(x=>x.r).join('/')}).join('<br>')}</div></div>`;
+    }
+    if(de&&(de.weight!=null||de.kcal!=null)){
+      body+=`<div><b>⚖️ Dieta</b><div class="s">${de.weight!=null&&de.weight!==''?'Peso: '+fmt(de.weight)+' kg':''}${de.kcal!=null&&de.kcal!==''?' · '+fmt(de.kcal)+' kcal':''}${de.prot!=null&&de.prot!==''?' · '+fmt(de.prot)+'g prot':''}${de.inc?' · ⚠️ incompleto':''}</div></div>`;
+    }
+    if(!body)body='<div class="s">Sem registros neste dia.</div>';
+    detail=`<div class="daydetail"><div class="dtitle">${dLabel}</div>${body}</div>`;
+  }
+  view.innerHTML=`
+  <div class="card">
+    <h3>Sequências</h3>
+    <div class="statgrid">
+      <div class="stat"><div class="streakbig"><span class="n">${wstreak}</span><span class="u">dias 🔥</span></div><div class="l">Pesagens seguidas</div></div>
+      <div class="stat"><div class="streakbig"><span class="n">${tstreak}</span><span class="u">semanas 💪</span></div><div class="l">Semanas com 3 treinos</div></div>
+      <div class="stat"><div class="v ${weekN>=3?'up':''}">${weekN}/3</div><div class="l">Treinos esta semana</div></div>
+      <div class="stat"><div class="v">${setsWeek}</div><div class="l">Séries na semana</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="calhead">
+      <button id="calprev">‹</button>
+      <span class="mname">${mname}</span>
+      <button id="calnext">›</button>
+    </div>
+    <div class="cal">${cal}</div>
+    <div class="legend"><span><span class="sq"></span>treino</span><span><span class="dt"></span>pesagem</span><span>toque no dia para detalhes</span></div>
+    ${detail}
+    <div class="statgrid" style="margin-top:12px">
+      <div class="stat"><div class="v acc">${monthTrains}</div><div class="l">Treinos no mês</div></div>
+      <div class="stat"><div class="v">${monthWeighs}/${dim}</div><div class="l">Pesagens no mês</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Tonelagem semanal</h3>
+    <p class="note" style="margin-top:4px;font-size:12px;color:var(--faint)">Volume total levantado (carga × reps) por semana — últimas 8 semanas</p>
+    <canvas id="tonchart"></canvas>
+  </div>`;
+  document.getElementById('calprev').onclick=()=>{homeMonth=new Date(y,mo-1,1);homeSel=null;renderHome()};
+  document.getElementById('calnext').onclick=()=>{homeMonth=new Date(y,mo+1,1);homeSel=null;renderHome()};
+  view.querySelectorAll('.cal .day[data-day]').forEach(el=>{
+    if(el.classList.contains('future'))return;
+    el.onclick=()=>{homeSel=homeSel===el.dataset.day?null:el.dataset.day;renderHome()};
+  });
+  requestAnimationFrame(drawTonnage);
+}
+function drawTonnage(){
+  const cv=document.getElementById('tonchart');if(!cv)return;
+  const dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=150;
+  cv.width=W*dpr;cv.height=H*dpr;
+  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+  ctx.font='10px ui-monospace,monospace';
+  const now=new Date();
+  const mon=new Date(now);mon.setDate(now.getDate()-((now.getDay()+6)%7));mon.setHours(0,0,0,0);
+  const weeks=[];
+  for(let i=7;i>=0;i--){
+    const ws=new Date(mon.getTime()-i*6048e5), we=new Date(ws.getTime()+6048e5);
+    let ton=0;
+    for(const s of history){const t=new Date(s.date);if(t>=ws&&t<we)for(const e of s.entries)for(const st of e.sets)if(st.r!=null&&st.w!=null)ton+=st.w*st.r}
+    weeks.push({label:String(ws.getDate()).padStart(2,'0')+'/'+String(ws.getMonth()+1).padStart(2,'0'),ton});
+  }
+  const mx=Math.max(...weeks.map(w=>w.ton),1);
+  if(mx<=1){ctx.fillStyle='#5c636c';ctx.font='13px sans-serif';ctx.fillText('Registre treinos para ver o volume',20,75);return}
+  const bw=(W-20)/8;
+  weeks.forEach((w,i)=>{
+    const h=(w.ton/mx)*(H-42);
+    const x=10+i*bw+bw*0.15, y=H-24-h;
+    ctx.fillStyle=i===7?'#f5a623':'#6b5316';
+    ctx.beginPath();ctx.roundRect(x,y,bw*0.7,h,4);ctx.fill();
+    ctx.fillStyle='#8b929b';
+    if(w.ton>0){const lbl=w.ton>=1000?(w.ton/1000).toFixed(1)+'t':Math.round(w.ton)+'';ctx.fillText(lbl,x+bw*0.35-ctx.measureText(lbl).width/2,y-5)}
+    ctx.fillStyle='#5c636c';
+    ctx.fillText(w.label,x+bw*0.35-ctx.measureText(w.label).width/2,H-8);
+  });
+}
+
+/* ---- TRAIN ---- */
+/* aviso para aparelho sem a chave do Hevy (os treinos ainda chegam pela nuvem, se houver) */
+function hevyConnectCard(){
+  if(hevyKey)return '';
+  return `<div class="card"><h3>🔗 Conecte o Hevy neste aparelho</h3>
+    <p class="note" style="margin:8px 0 12px">O treino vem inteiro das suas rotinas do Hevy — não há nada para montar aqui. Configure a chave da API do Hevy na aba Dados para puxar os treinos direto${program.length?'; até lá, você vê o que chegou pela nuvem do outro aparelho':''}.</p>
+    <button class="btn ghost" id="gohevy">Configurar na aba Dados</button></div>`;
+}
+function renderTrain(){
+  const pm=diet.settings.progMode||'conservador';
+  const modeCard=`<div class="card">
+    <h3>Modo de progressão</h3>
+    <div class="modegrid" style="grid-template-columns:1fr 1fr">
+      <button data-pm="conservador" class="${pm==='conservador'?'on':''}">Conservador</button>
+      <button data-pm="flexivel" class="${pm==='flexivel'?'on':''}">Flexível</button>
+    </div>
+    <p class="note" style="font-size:12.5px"><b>Conservador:</b> sobe a carga só quando todas as séries planejadas batem o topo da faixa. <b>Flexível:</b> sobe quando todas ficam dentro da faixa e o total fica a 1 do máximo (ex.: 10/10/9 em 3×8-10; 12/10/7 não sobe). Os dois exigem as séries planejadas completas na carga de referência e o RIR da rotina (série a série quando a rotina tem RPE diferente por série); série marcada como falha sem RPE conta como RIR 0, e sem RPE o app avisa que o esforço não foi conferido. Em rotinas com série pesada + back-offs, a decisão é pela série pesada; os back-offs acompanham. O incremento automático é o salto que você costuma dar ao progredir no exercício — não prova o menor degrau do aparelho; toque nele para definir outro (ex.: microanilhas de 0,5 kg).</p>
+  </div>`;
+  let h=hevyConnectCard()+hevyBar();
+  if(!program.length){
+    if(hevyKey)h+='<div class="empty">Nenhuma rotina do Hevy'+(diet.settings.hevyFolder!=null?' nesta pasta':'')+' ainda.<br>Monte seus treinos no Hevy (Treino → Rotinas) e toque em ↻ Atualizar.</div>';
+    view.innerHTML=h;
+    bindTrain();
+    return;
+  }
+  if(!program.find(w=>w.id===selWorkout))selWorkout=program[0].id;
+  const wo=program.find(w=>w.id===selWorkout);
+  const db=deloadBanner(), dlBtn='<button class="mini up2" id="deloaddone" style="padding:0 4px;text-decoration:underline">marcar como feito</button>';
+  if(db)h+=db.kind==='sugerido'
+    ?`<div class="decide stall" style="margin-bottom:14px"><b>DELOAD SUGERIDO</b><span style="font-size:12.5px;color:var(--muted)">${db.weeks} semanas de treino desde o último deload ou pausa, e ${db.n} exercício${db.n===1?'':'s'} caindo ou estagnado${db.n===1?'':'s'} — faça uma semana com metade das séries e cargas ~15% menores. ${dlBtn}</span></div>`
+    :`<div class="decide hold" style="margin-bottom:14px"><b>LEMBRETE DE DELOAD</b><span style="font-size:12.5px;color:var(--muted)">${db.weeks} semanas de treino sem semana leve. O desempenho ainda não caiu; se a fadiga acumular (sono pior, dores, cargas pesando mais), faça uma semana com metade das séries. ${dlBtn}</span></div>`;
+  h+=`<div class="chips">${program.map(w=>`<button class="chip ${w.id===selWorkout?'sel':''}" data-wo="${w.id}">${esc(w.name)}</button>`).join('')}</div>`;
+  h+=wo.exercises.map(ex=>{
+    const sg=suggest(ex,wo), T=progTarget(ex);
+    const prev=lastEntries(ex.id,1,exScope(ex,wo))[0];
+    let lastLine='';
+    if(prev){
+      /* mesmas séries que a decisão usa (carga de referência); drop/back-off só contados */
+      const ref=aiReferenceSets(prev.sets);
+      const extra=ref.extra;
+      const reps=ref.sets.map(s=>s.r).join('/');
+      const rirs=ref.sets.map(s=>s.rir!=null&&s.rir!==''?fmt(s.rir):(s.t==='failure'?'F':null)).filter(v=>v!=null).join('/');
+      lastLine=`<div class="lastline">Última (${new Date(prev.date).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}): ${ref.weight?fmt(ref.weight)+' kg':'peso corporal'} × ${reps}${rirs?' · RIR '+rirs:''}${extra>0?' · +'+extra+' drop/back-off':''}</div>`;
+    }
+    const bwEx=!ex.planW&&(!prev||!prev.sets.some(s=>+s.w>0));
+    /* carga que está na rotina do Hevy × decisão do app: avisa quando a rotina precisa ser atualizada lá */
+    let rot='';
+    const pw=T.topW, rl=T.multi?'Série pesada na rotina do Hevy':'Rotina no Hevy';
+    if(pw&&sg.w!=null&&sg.type!=='first')rot=Math.abs(sg.w-pw)<0.01
+      ?`<div class="rotline ok">📋 ${rl} já está em ${fmt(pw)} kg ✓</div>`
+      :`<div class="rotline">📋 ${rl}: ${fmt(pw)} kg → ajuste para <b>${fmt(sg.w)} kg</b></div>`;
+    return `<div class="card">
+      <h3>${esc(ex.name)}</h3>
+      <div class="sub">${T.multi?`${T.k}×${fmtR(T.lo,T.hi)} pesada${T.k>1?'s':''} + ${ex.sets-T.k} back-off`:`${ex.sets} × ${fmtR(ex.repMin,ex.repMax)} reps`} · RIR ${fmtR(T.rirMin,T.rirMax)}${bwEx?'':' · '+incSelect(ex,wo)}</div>
+      <div class="decide ${sg.type}"><b>${sg.label}${sg.w!=null?' · '+fmt(sg.w)+' kg':''}</b></div>
+      <div class="note" style="margin:-4px 0 0;font-size:12.5px">${sg.msg}</div>
+      ${rot}
+      ${lastLine}
+    </div>`;
+  }).join('');
+  h+=modeCard;
+  view.innerHTML=h;
+  bindTrain();
+}
+function bindTrain(){
+  bindHevyBar();
+  const gh=document.getElementById('gohevy');
+  if(gh)gh.onclick=()=>{tab='data';render()};
+  view.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{selWorkout=c.dataset.wo;render()});
+  view.querySelectorAll('[data-pm]').forEach(b=>b.onclick=async()=>{diet.settings.progMode=b.dataset.pm;await saveDiet();await touchAndPush();toast('✓ Modo '+(b.dataset.pm==='flexivel'?'flexível':'conservador'));render()});
+  const dl=document.getElementById('deloaddone');
+  if(dl)dl.onclick=async()=>{diet.settings.lastDeload=todayISO();await saveDiet();await touchAndPush();toast('✓ Deload registrado');render()};
+  view.querySelectorAll('.incsel').forEach(sel=>sel.onchange=async()=>{
+    const v=sel.value===''?null:+sel.value, m=Object.assign({},diet.settings.incOverride);
+    if(v>0)m[sel.dataset.ex]=v;else delete m[sel.dataset.ex];
+    diet.settings.incOverride=m;
+    await saveDiet();await touchAndPush();
+    toast(v>0?'✓ Incremento definido: +'+fmt(v)+' kg':'✓ Incremento automático');render();
+  });
+}
+/* incremento do exercício: automático (aprendido ou padrão) ou definido por você */
+function incSelect(ex,wo){
+  const cur=incInfo(ex,false,wo), au=incInfo(ex,true,wo), ov=cur.src==='definido'?cur.v:null;
+  return `<select class="incsel" data-ex="${esc(ex.id)}" aria-label="Incremento de carga"><option value="">${ov==null?'+'+fmt(au.v)+' kg · '+au.src:'automático (+'+fmt(au.v)+' kg, '+au.src+')'}</option>${INC_STEPS.map(v=>`<option value="${v}"${ov===v?' selected':''}>+${fmt(v)} kg</option>`).join('')}</select>`;
+}
+
+/* ---- DATA ---- */
+function renderData(){
+  const recent=[...history].reverse().slice(0,12);
+  view.innerHTML=`
+  <div class="card">
+    <h3>☁️ Nuvem — sincronizar entre aparelhos</h3>
+    <p class="note" style="margin:8px 0 12px">Guarda seus dados num <b>Gist secreto</b> da sua conta GitHub e mantém iPhone e Mac iguais. <b>Num aparelho novo, cole só este token</b>: o app acha o Gist sozinho e traz treinos, dieta e as chaves do Hevy e do Gemini — as chaves vão <b>criptografadas com o seu token</b>, e quem tiver só o link do Gist não consegue lê-las. No iPhone, o app da tela de início e o Safari guardam dados separados: configure no que você usa.</p>
+    <details ${ghToken?'':'open'}>
+      <summary>${ghToken?'Token configurado — alterar':'Configurar token do GitHub'}</summary>
+      <p class="note" style="margin:8px 0 10px">Crie em <b>github.com/settings/tokens</b> → "Generate new token (classic)" → marque só o escopo <span class="tag">gist</span> → sem expiração (ou longa). Cole abaixo:</p>
+      <input type="text" id="ghtok" placeholder="ghp_..." value="${esc(ghToken||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
+      <button class="btn ghost" id="ghsave" style="margin-top:10px">Salvar token e ativar</button>
+    </details>
+    ${ghToken?`<button class="btn ghost" id="ghsync" style="margin-top:10px">Sincronizar agora</button>`:''}
+    <details style="margin-top:10px">
+      <summary>Gist ID (forçar mesmo Gist em todos os aparelhos)</summary>
+      <p class="note" style="margin:8px 0 10px">Se cada aparelho criou um Gist próprio, cole aqui o ID correto (o mesmo do outro aparelho) e confirme. O ID aparece no rodapé desta seção e na URL do gist em gist.github.com.</p>
+      <input type="text" id="ghgist" placeholder="ex.: a1b2c3d4e5..." value="${esc(gistId||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
+      <button class="btn ghost" id="ghgistsave" style="margin-top:10px">Usar este Gist</button>
+    </details>
+    ${syncState?`<p class="note" style="margin-top:10px;font-family:var(--mono);font-size:12px">${esc(syncState)}</p>`:''}
+    ${gistId?`<p class="note" style="margin-top:6px;font-size:11px;color:var(--faint)">Gist: <span class="tag">${esc(gistId)}</span></p>`:''}
+  </div>
+  <div class="card">
+    <h3>🔗 Hevy — monte e treine lá, progrida aqui</h3>
+    <p class="note" style="margin:8px 0 12px">O treino vem inteiro do <b>Hevy</b>: as rotinas (exercícios, séries, faixa de reps, carga e RPE) viram os treinos da aba Progressão, e as sessões que você registra lá viram o histórico. Nada é montado aqui. Atualiza sozinho a cada abertura. A chave fica só neste aparelho — configure no iPhone e no Mac. Requer <b>Hevy Pro</b> — chave em hevy.com/settings → Developer.</p>
+    <details ${hevyKey?'':'open'}>
+      <summary>${hevyKey?'Chave configurada — alterar':'Configurar chave do Hevy'}</summary>
+      <input type="password" id="hevykey" placeholder="chave da API do Hevy" value="${esc(hevyKey||'')}" autocomplete="off" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono);margin-top:8px">
+      <button class="btn ghost" id="hevysave" style="margin-top:10px">Salvar chave</button>
+    </details>
+    ${hevyKey?`<div class="row2" style="margin-top:10px">
+      <button class="btn ghost" id="hevyimp">↻ Atualizar agora</button>
+      <button class="btn ghost" id="hevyfull">Reimportar tudo</button>
+    </div>`:''}
+    ${hevyKey&&hevyFolders.length?`<div class="fld" style="margin-top:12px"><label>Pasta de rotinas usada como treino</label><select id="hvfolder"><option value="">Todas as rotinas</option>${hevyFolders.map(f=>`<option value="${esc(f.id)}"${diet.settings.hevyFolder!=null&&String(diet.settings.hevyFolder)===String(f.id)?' selected':''}>${esc(f.title||'Sem nome')}</option>`).join('')}</select></div>`:''}
+    ${hevyKey?`<p class="note" style="margin-top:8px;font-family:var(--mono);font-size:12px">${hevyErr?'⚠️ Última tentativa falhou: '+esc(hevyErr):'Última atualização: '+(hevyLast?new Date(hevyLast).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—')}</p>`:''}
+    <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">O <b>RPE da rotina</b> vira o RIR alvo e o <b>RPE registrado no treino</b> é comparado com ele (RIR = 10 − RPE). Sem RPE no treino, o app assume que o alvo foi respeitado. Séries de aquecimento são ignoradas. A carga da rotina aparece na aba Progressão com o aviso de quando atualizá-la no Hevy — o app não grava na rotina porque a API do Hevy apagaria o RPE dela.</p>
+  </div>
+  <div class="card">
+    <h3>Exportar / Importar</h3>
+    <p class="note" style="margin:8px 0 12px">CSV pronto para o Excel brasileiro (separador <span class="tag">;</span> e vírgula decimal). O import aceita o mesmo formato de volta e mescla por data + treino.</p>
+    <div class="row2">
+      <button class="btn ghost" id="expcsv">⬇ Exportar CSV</button>
+      <button class="btn ghost" id="impcsv">⬆ Importar CSV</button>
+    </div>
+    <div class="row2" style="margin-top:10px">
+      <button class="btn ghost" id="expjson">Backup completo</button>
+      <button class="btn ghost" id="impjson">Restaurar backup</button>
+    </div>
+    <input type="file" id="fcsv" accept=".csv,text/csv" hidden>
+    <input type="file" id="fjson" accept=".json,application/json" hidden>
+  </div>
+  <div class="card">
+    <h3>Como o algoritmo decide</h3>
+    <details><summary>Dupla Progressão Autorregulada</summary>
+      <p class="note">Cada exercício tem uma <b>faixa de reps</b> e um <b>RIR alvo</b>. Após cada sessão registrada:</p>
+      <p class="note" style="margin-top:6px">
+      🟢 <b>SOBE CARGA</b> — todas as séries no topo da faixa com RIR ≥ alvo → soma o incremento (o degrau de carga que você mais usa naquele exercício no Hevy).<br>
+      🟡 <b>MANTÉM</b> — dentro da faixa → mesma carga, busque +1 rep por série.<br>
+      🔴 <b>SEGURA/REDUZ</b> — série abaixo da faixa (com RIR 0 → recua um incremento).<br>
+      🟣 <b>ESTAGNOU</b> — 3+ sessões sem progresso na mesma carga → microdeload de ~10% ou troca de exercício.</p>
+      <p class="note" style="margin-top:6px">Método do <i>Muscle &amp; Strength Pyramid</i> (Helms). Em dias ruins, confie no RIR: menos reps com o mesmo esforço ainda é estímulo válido.</p>
+    </details>
+  </div>
+  <div class="card">
+    <h3>Histórico recente</h3>
+    ${recent.length?recent.map(s=>`<div class="hist">
+      <div class="d">${new Date(s.date).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})} ${new Date(s.date).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>
+      <div class="t">${esc(s.workoutName)}</div>
+      <div class="s">${s.entries.map(e=>{const best=e.sets.filter(x=>x.r!=null);const w=Math.max(...best.map(x=>+x.w||0));return `${esc(e.exName.split('(')[0].trim())} — ${fmt(w)}kg × ${best.map(x=>x.r).join('/')}`}).join('<br>')}</div>
+    </div>`).join(''):'<div class="empty">Nenhuma sessão registrada ainda.</div>'}
+    ${history.length?`<button class="btn danger" id="clearh" style="margin-top:12px">Apagar todo o histórico</button>`:''}
+  </div>`;
+  document.getElementById('expcsv').onclick=exportCSV;
+  const hvs=document.getElementById('hevysave');
+  if(hvs)hvs.onclick=async()=>{
+    const nk=document.getElementById('hevykey').value.trim();
+    if(nk!==hevyKey){hevyKey=nk;await sSet(K_HEVY,hevyKey);await markKey('hevy')}
+    if(!hevyKey){hevyErr='';if(ghToken)cloudPush();toast('Chave removida');renderData();return}
+    toast('Conectando ao Hevy…');
+    const r=await hevySync(true);
+    if(ghToken)cloudPush();
+    if(r.err)toast('⚠️ Falha: '+r.err);
+    else toast('✓ Conectado — '+r.shown+' rotina(s) e '+r.total+' treino(s) do Hevy');
+    renderData();
+  };
+  const hvi=document.getElementById('hevyimp');
+  if(hvi)hvi.onclick=async()=>{
+    toast('Atualizando do Hevy…');
+    const r=await hevySync(false);
+    toast(r.err?'⚠️ Falha: '+r.err:(r.n?'✓ '+r.n+' treino(s) novo(s)':'✓ Tudo em dia'));
+    renderData();
+  };
+  const hvf=document.getElementById('hevyfull');
+  if(hvf)hvf.onclick=async()=>{
+    toast('Reimportando tudo do Hevy…');
+    const r=await hevySync(true);
+    toast(r.err?'⚠️ Falha: '+r.err:'✓ '+r.shown+' rotina(s) e '+r.total+' treino(s) do Hevy');
+    renderData();
+  };
+  const hfs=document.getElementById('hvfolder');
+  if(hfs)hfs.onchange=async()=>{
+    diet.settings.hevyFolder=hfs.value===''?null:Number(hfs.value);
+    await saveDiet();
+    toast('Atualizando rotinas…');
+    const r=await hevySync(false);
+    if(r.err)toast('⚠️ Hevy: '+r.err);
+    else{await touchAndPush();toast('✓ '+r.shown+' rotina(s) nesta seleção')}
+    renderData();
+  };
+  const ghs=document.getElementById('ghsave');
+  if(ghs)ghs.onclick=async()=>{
+    ghToken=document.getElementById('ghtok').value.trim();
+    await sSet(K_GH,ghToken);
+    if(!ghToken){toast('Token removido');renderData();return}
+    toast('Conectando…');
+    if(!gistId)await findGist();
+    if(gistId)await cloudPull();
+    if(!updatedAt)updatedAt=Date.now(),await sSet(K_UPD,updatedAt);
+    await cloudPush();
+    if(secretsNote)toast(secretsNote);
+    renderData();
+    if(hevyKey)hevySync(false).then(r=>{if(!r.err&&tab==='data')renderData()});
+  };
+  const ghy=document.getElementById('ghsync');
+  if(ghy)ghy.onclick=async()=>{
+    toast('Sincronizando…');
+    await cloudPull();
+    await cloudPush();
+    renderData();
+  };
+  const ghg=document.getElementById('ghgistsave');
+  if(ghg)ghg.onclick=async()=>{
+    const v=document.getElementById('ghgist').value.trim();
+    if(!v){toast('Cole o ID do Gist');return}
+    gistId=v;await sSet(K_GIST,gistId);
+    toast('Verificando…');
+    updatedAt=0;await sSet(K_UPD,0);
+    await cloudPull();
+    renderData();
+  };
+  document.getElementById('expjson').onclick=exportJSON;
+  document.getElementById('impcsv').onclick=()=>document.getElementById('fcsv').click();
+  document.getElementById('impjson').onclick=()=>document.getElementById('fjson').click();
+  document.getElementById('fcsv').onchange=importCSV;
+  document.getElementById('fjson').onchange=importJSON;
+  const ch=document.getElementById('clearh');
+  if(ch)ch.onclick=async()=>{if(confirm('Apagar TODO o histórico? Exporte antes se quiser guardar.')){history=[];await saveHistory();await touchAndPush();render();toast('Histórico apagado')}};
+}
+
+/* ============ CSV (pt-BR Excel) ============ */
+function exportCSV(){
+  let rows=['sep=;','Data;Hora;Treino;Exercício;Série;Carga (kg);Reps;RIR'];
+  for(const s of history){
+    const d=new Date(s.date);
+    const ds=d.toLocaleDateString('pt-BR'),ts=d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    for(const e of s.entries)e.sets.forEach((st,i)=>{
+      if(st.r==null&&st.w==null)return;
+      rows.push([ds,ts,s.workoutName,e.exName,i+1,st.w!=null?String(st.w).replace('.',','):'',st.r??'',st.rir??''].map(csvq).join(';'));
+    });
+  }
+  download('historico-treinos.csv','\uFEFF'+rows.join('\r\n'),'text/csv;charset=utf-8');
+  toast('✓ CSV exportado');
+}
+const csvq=v=>{v=String(v);return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+function parseCSVLine(line){
+  const out=[];let cur='',q=false;
+  for(let i=0;i<line.length;i++){const c=line[i];
+    if(q){if(c==='"'){if(line[i+1]==='"'){cur+='"';i++}else q=false}else cur+=c}
+    else if(c==='"')q=true;
+    else if(c===';'){out.push(cur);cur=''}
+    else cur+=c;
+  }
+  out.push(cur);return out;
+}
+async function importCSV(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const text=(await f.text()).replace(/^\uFEFF/,'');
+  const lines=text.split(/\r?\n/).filter(l=>l.trim()&&!/^sep=/.test(l)&&!/^Data;/.test(l));
+  const sessions={};let n=0,bad=0;
+  for(const line of lines){
+    const [ds,ts,wn,en,si,w,r,rir]=parseCSVLine(line);
+    if(!ds||!en)continue;
+    const [dd,mm,yy]=ds.split('/');
+    const dt=new Date(`${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}T${(ts||'12:00')}:00`);
+    const wv=w?numBR(w):null, rv=r?numBR(r):null, iv=rir!=null&&rir!==''?numBR(rir):null;
+    if(!/^\d{4}$/.test(yy||'')||isNaN(dt)||(wv!=null&&!inRange(wv,0,1000))||(rv!=null&&!inRange(rv,0,200))||(iv!=null&&!inRange(iv,0,10))){bad++;continue}
+    const iso=dt.toISOString();
+    const key=ds+'|'+wn;
+    if(!sessions[key]){
+      const wo=program.find(x=>x.name===wn);
+      sessions[key]={id:uid(),date:iso,workoutId:wo?wo.id:'imported',workoutName:wn,entries:[]};
+    }
+    const sess=sessions[key];
+    let entry=sess.entries.find(e=>e.exName===en);
+    if(!entry){
+      let exId='imp_'+en;
+      for(const wo of program){const m=wo.exercises.find(e=>e.name===en);if(m){exId=m.id;break}}
+      entry={exId,exName:en,sets:[]};sess.entries.push(entry);
+    }
+    entry.sets[(+si||entry.sets.length+1)-1]={w:wv,r:rv,rir:iv};
+    n++;
+  }
+  for(const key in sessions){
+    const s=sessions[key];
+    history=history.filter(h=>!(new Date(h.date).toLocaleDateString('pt-BR')+'|'+h.workoutName===key));
+    history.push(s);
+  }
+  history.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  await saveHistory();await touchAndPush();ev.target.value='';
+  render();toast(`✓ ${n} séries importadas`+(bad?` · ${bad} linha(s) inválida(s) ignorada(s)`:''));
+}
+
+/* ============ JSON backup ============ */
+function exportJSON(){
+  download('backup-progressao.json',JSON.stringify({program,history,diet,exported:new Date().toISOString()},null,1),'application/json');
+  toast('✓ Backup exportado');
+}
+async function importJSON(ev){
+  const f=ev.target.files[0];if(!f)return;
+  try{
+    const data=JSON.parse(await f.text());
+    if(!Array.isArray(data.program)||!Array.isArray(data.history))throw 0;
+    const hs=data.history.filter(h=>h&&Array.isArray(h.entries)&&!isNaN(new Date(h.date)));
+    let bad=data.history.length-hs.length;
+    program=data.program;history=hs;
+    if(data.diet&&data.diet.entries){const c=cleanDietEntries(data.diet.entries);bad+=c.bad;diet.entries=c.entries;const ns=data.diet.settings&&typeof data.diet.settings==='object'?data.diet.settings:{};diet.settings=sanitizeSettings(Object.assign(diet.settings,ns));restoreWeek();await saveDiet()}
+    await saveProgram();await saveHistory();await touchAndPush();
+    selWorkout=program[0]?.id;ev.target.value='';
+    render();toast('✓ Backup restaurado'+(bad?' · '+bad+' registro(s) inválido(s) ignorado(s)':''));
+  }catch(e){toast('Arquivo inválido')}
+}
+function download(name,content,type){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type}));
+  a.download=name;a.click();URL.revokeObjectURL(a.href);
+}
+
+/* ============ AI analysis (Gemini) ============ */
+let aiJob=null, aiBusy=false, aiWake=null; /* aiJob = resposta atual/última (texto, modelo, estado) — sobrevive à troca de aba */
+const GEMINI_BASE='https://generativelanguage.googleapis.com/v1beta/models/';
+const GEMINI_DEFAULT_MODEL='gemini-3.8-flash';
+const GEMINI_FALLBACK_MODELS=['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash'];
+const AI_THINKING='low'; /* raciocínio curto: no padrão (medium) a análise completa passava de 90 s */
+const AI_MAX_TOKENS=8192; /* inclui os tokens de raciocínio — com limite baixo a resposta volta cortada ou vazia */
+const AI_FIRST_MS=45000, AI_IDLE_MS=30000, AI_TOTAL_MS=180000; /* até o 1º trecho de texto · pausa máxima entre trechos · teto por modelo */
+const AI_AUTO_RESUMES=2; /* retomadas automáticas por resposta quando a conexão cai no meio (ou o texto passa do limite) */
+const AI_CONTINUE='Sua resposta acima foi interrompida (queda de conexão ou limite de tamanho). Continue exatamente do ponto onde o texto parou: não repita nada do que já está escrito, não recomece a resposta e não comente a interrupção — escreva só o que falta, no mesmo formato. Se a resposta já estava completa, responda apenas [FIM].';
+function normalizeGeminiModel(model){
+  return String(model||'').trim().replace(/^models\//,'')||GEMINI_DEFAULT_MODEL;
+}
+function geminiModelCandidates(){
+  return [...new Set([normalizeGeminiModel(aiModel),...GEMINI_FALLBACK_MODELS])];
+}
+function geminiGenConfig(model){
+  const g={maxOutputTokens:AI_MAX_TOKENS}; /* sem temperature: os modelos 3.x pedem o padrão */
+  if(/^gemini-3/.test(model))g.thinkingConfig={thinkingLevel:AI_THINKING};
+  else if(/^gemini-2\.5/.test(model))g.thinkingConfig={thinkingBudget:1024};
+  return g;
+}
+/* mesmas séries que a decisão de progressão usa (workSets): a mais pesada das séries de trabalho; drops fora */
+function aiReferenceSets(sets){return workSets(sets)}
+function renderAI(){
+  view.innerHTML=`
+  <div class="card">
+    <h3>Análise inteligente</h3>
+    <p class="note" style="margin:8px 0 12px">Envia ao <b>Gemini</b> um resumo do seu programa, histórico, RIR e dieta e devolve uma leitura do progresso: estagnações, padrão de RIR, fadiga e ações concretas. Seus dados continuam salvos só aqui — o modelo lê um recorte a cada análise.</p>
+    <button class="btn" id="aigo">Analisar meu progresso</button>
+  </div>
+  <div class="card">
+    <h3>Pergunta livre</h3>
+    <p class="note" style="margin:8px 0 10px">Pergunte algo sobre seu treino — a resposta considera seu programa e histórico atuais.</p>
+    <textarea id="aiq" placeholder="Ex.: devo antecipar o deload para a semana da prova?"></textarea>
+    <button class="btn ghost" id="aiask" style="margin-top:10px">Perguntar</button>
+  </div>
+  <div class="card">
+    <details>
+      <summary>Sobre você (vai junto em toda análise)</summary>
+      <textarea id="aiabout" style="margin-top:10px;min-height:84px">${esc(aiAbout())}</textarea>
+      ${diet.settings.aiAbout?'':'<p class="note" style="margin-top:6px;font-size:11.5px">Texto sugerido, ainda não confirmado — a IA recebe como "descrição padrão" até você editar (ou só confirmar) e salvar.</p>'}
+      <p class="note" style="margin-top:7px;font-size:11.5px;color:var(--faint)">O app acrescenta sozinho: ${esc(aiProfileLine().replace(/^Perfil do atleta \(do app\): /,''))} — mais o objetivo da dieta e o modo de progressão atuais. Altura, idade e % de gordura vêm da calculadora da aba Dieta.</p>
+      <button class="btn ghost" id="aiaboutsave" style="margin-top:10px">Salvar</button>
+    </details>
+  </div>
+  <div class="card">
+    <details ${apiKey?'':'open'}>
+      <summary>Chave do Gemini (Google AI Studio)</summary>
+      <p class="note" style="margin:8px 0 10px">Crie uma chave gratuita em <b>aistudio.google.com</b> → "Get API key", cole aqui e toque em <b>Testar conexão</b>. A chave fica guardada só neste aparelho.</p>
+      <input type="password" id="aikey" placeholder="Chave da Gemini API" value="${esc(apiKey||'')}" autocomplete="off" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
+      <div class="fld" style="margin-top:10px"><label>Modelo</label><input type="text" id="aimodel" value="${esc(normalizeGeminiModel(aiModel))}" style="text-align:left;font-size:13px;padding:10px"></div>
+      <p class="note" style="margin-top:7px;font-size:11.5px;color:var(--faint)">Padrão: ${GEMINI_DEFAULT_MODEL}. Se o modelo não existir mais, estiver sem cota ou não começar a responder em ${AI_FIRST_MS/1000} s, o app tenta ${GEMINI_FALLBACK_MODELS.join(' → ')}.</p>
+      <div class="row2" style="margin-top:10px">
+        <button class="btn ghost" id="aikeysave">Salvar</button>
+        <button class="btn ghost" id="aitest">Testar conexão</button>
+      </div>
+      <button class="btn danger" id="aikeyclear" style="margin-top:10px">Remover chave</button>
+    </details>
+  </div>
+  <div id="aires"></div>`;
+  aiPaint(); /* resposta em andamento (ou a última) continua visível ao voltar para a aba */
+  document.getElementById('aigo').onclick=()=>runAI(null);
+  document.getElementById('aiaboutsave').onclick=async()=>{
+    const v=document.getElementById('aiabout').value.trim().slice(0,600);
+    diet.settings.aiAbout=v||null;
+    await saveDiet();await touchAndPush();toast(v?'✓ Salvo — vai junto nas próximas análises':'Texto apagado — a IA volta a receber a descrição padrão, marcada como não confirmada');renderAI();
+  };
+  document.getElementById('aiask').onclick=()=>{const q=document.getElementById('aiq').value.trim();if(!q){toast('Escreva a pergunta primeiro');return}runAI(q)};
+  const saveCfg=async()=>{
+    const prevKey=apiKey;
+    apiKey=document.getElementById('aikey').value.trim();
+    aiModel=normalizeGeminiModel(document.getElementById('aimodel').value);
+    await sSet(K_KEY,apiKey);await sSet(K_MODEL,aiModel);
+    if(apiKey!==prevKey){await markKey('gemini');if(ghToken)cloudPush()} /* leva a chave nova para os outros aparelhos */
+  };
+  document.getElementById('aikeysave').onclick=async()=>{await saveCfg();toast(apiKey?'✓ Configuração salva':'Chave vazia')};
+  document.getElementById('aitest').onclick=async()=>{
+    await saveCfg();
+    if(!apiKey){toast('Informe a chave do Gemini');return}
+    if(aiBusy)return;
+    aiBusy=true;
+    const target=document.getElementById('aires');
+    const w=aiWaiting('Testando conexão');
+    try{
+      const before=aiModel;
+      const res=await geminiGenerateWithFallback('Teste técnico de conexão.','Responda somente com a palavra OK.',{onModel:w.setModel});
+      w.stop();
+      await adoptModel(res);
+      const note=modelNote(before,res);
+      target.innerHTML='<div class="card"><div class="note"><b>✓ Gemini conectado</b> em '+w.secs()+' s.<br><br>Modelo que respondeu: <span class="tag">'+esc(res.model)+'</span>'+(note?'<br><br>'+note:'')+'</div></div>';
+      toast('✓ Conexão funcionando');
+    }catch(e){w.stop();showGeminiError(target,e)}
+    finally{w.stop();aiBusy=false}
+  };
+  document.getElementById('aikeyclear').onclick=async()=>{apiKey='';await sSet(K_KEY,'');await markKey('gemini');if(ghToken)cloudPush();renderAI();toast('Chave removida')};
+}
+const AI_ABOUT_DEFAULT='Intermediário (1+ ano de treino), natural, trabalho sedentário. Objetivo estético: V-taper — latíssimo e deltoide lateral prioritários; perna em manutenção deliberada.';
+const aiAbout=()=>diet.settings.aiAbout||AI_ABOUT_DEFAULT;
+function aiProfileLine(){
+  const p=diet.settings.profile||{}, b=[];
+  if(p.sex)b.push(p.sex==='f'?'mulher':'homem');
+  if(p.age)b.push(fmt(p.age)+' anos');
+  if(p.h)b.push(fmt(p.h/100)+' m');
+  const tr=computeTrend(), td=Object.keys(tr).sort();
+  if(td.length)b.push('peso-tendência atual ~'+fmt(tr[td[td.length-1]].toFixed(1))+' kg');
+  else if(p.w)b.push('peso informado na calculadora '+fmt(p.w)+' kg'+(p.at?' (em '+p.at.split('-').reverse().join('/')+')':''));
+  else b.push('peso ainda não registrado');
+  if(p.bf!=null)b.push('~'+fmt(p.bf)+'% de gordura ('+(p.bfExam?'exame':'estimativa')+(p.at?' de '+p.at.split('-').reverse().join('/'):'')+')');
+  return 'Perfil do atleta (do app): '+b.join(', ')+'.';
+}
+function buildContext(){
+  const lines=[];
+  /* perfil montado das configurações atuais (calculadora da Dieta, peso-tendência, modo de progressão) + o texto
+     "Sobre você" da aba IA — nada fixo no código */
+  lines.push(aiProfileLine());
+  lines.push(diet.settings.aiAbout?'Sobre o atleta (texto dele): '+diet.settings.aiAbout:'Descrição padrão do app, ainda não confirmada pelo atleta: '+AI_ABOUT_DEFAULT);
+  lines.push(diet.settings.progMode==='flexivel'
+    ?'Progressão do app (modo flexível): dupla progressão autorregulada — sobe a carga quando todas as séries planejadas ficam dentro da faixa e o total fica a 1 rep do máximo, com o RIR da rotina.'
+    :'Progressão do app (modo conservador): dupla progressão autorregulada — sobe a carga quando todas as séries planejadas batem o topo da faixa com o RIR da rotina.');
+  lines.push('Em cada sessão abaixo aparece só a carga de referência (a mais pesada das séries de trabalho) e as séries feitas com ela; aquecimento, drops e back-offs ficam de fora. RIR "F" = série marcada como falha no Hevy, sem RPE (conta como RIR 0).');
+  /* programa atual = rotinas com sessões nas últimas 6 semanas (ou recém-criadas no Hevy). Rotinas antigas que
+     continuam salvas no Hevy vão só numa linha — detalhadas, a IA as lia como trocas constantes de divisão */
+  const now=Date.now(), DAY=864e5, dm=t=>new Date(t).toLocaleDateString('pt-BR');
+  const use=program.map(wo=>{
+    const ss=history.filter(h=>h.workoutId===wo.id||h.workoutName===wo.name);
+    return{wo,n:ss.filter(h=>now-new Date(h.date)<=42*DAY).length,
+      last:ss.reduce((a,h)=>Math.max(a,new Date(h.date).getTime()||0),0),
+      fresh:!ss.length&&!!wo.created&&now-new Date(wo.created).getTime()<=21*DAY};
+  });
+  let cur=use.filter(u=>u.n||u.fresh);
+  const old=use.filter(u=>!cur.includes(u));
+  if(cur.length){
+    const perWk=Math.round(history.filter(h=>now-new Date(h.date)<=28*DAY).length/4*10)/10;
+    lines.push('\nPrograma atual (rotinas do Hevy com sessões nas últimas 6 semanas): '+cur.map(u=>u.wo.name+' ('+(u.n?u.n+(u.n>1?' sessões':' sessão'):'rotina nova, ainda sem sessões')+')').join(', ')+' — média de '+fmt(perWk)+' sessões/semana nas últimas 4 semanas.');
+    if(old.length)lines.push('Rotinas antigas que continuam salvas no Hevy, sem sessões nas últimas 6 semanas (NÃO fazem parte do treino atual): '+old.map(u=>u.wo.name+(u.last?' (última em '+dm(u.last)+')':' (nunca usada)')).join(', ')+'.');
+  }else{
+    cur=use;
+    if(use.length)lines.push('\nNenhuma rotina tem sessões nas últimas 6 semanas. Rotinas salvas no Hevy: '+use.map(u=>u.wo.name).join(', ')+'.');
+  }
+  for(const{wo}of cur){
+    lines.push('\nTreino '+wo.name+':');
+    for(const ex of wo.exercises){
+      const prev=lastEntries(ex.id,8,exScope(ex,wo)).reverse();
+      const hist=prev.map(p=>{
+        const d=new Date(p.date).toLocaleDateString('pt-BR').slice(0,5);
+        const ref=aiReferenceSets(p.sets);
+        if(!ref.sets.length)return d+': sem séries válidas';
+        const reps=ref.sets.map(s=>s.r).join('/');
+        const rirs=ref.sets.map(s=>s.rir!=null&&s.rir!==''?fmt(s.rir):(s.t==='failure'?'F':null)).filter(v=>v!=null).join('/');
+        return d+': '+(ref.weight?fmt(ref.weight)+'kg':'peso corporal')+'×'+reps+' (RIR '+(rirs||'?')+')';
+      }).join(' | ');
+      const T=progTarget(ex);
+      lines.push('- '+ex.name+' [alvo '+(T.multi?T.k+'×'+fmtR(T.lo,T.hi)+' na carga pesada + '+(ex.sets-T.k)+' back-off':ex.sets+'×'+fmtR(ex.repMin,ex.repMax))+' RIR '+(T.rirSet?T.rirSet.map(fmt).join('/')+' série a série':fmtR(T.rirMin,T.rirMax))+(T.topW?', carga na rotina '+fmt(T.topW)+' kg':'')+']: '+(hist||'sem registros ainda'));
+    }
+  }
+  const t=computeTDEE(), wr=weeklyRate(), tr=computeTrend();
+  const{tk,W,M:MM}=weekPlan();
+  const twd=Object.keys(tr).sort();
+  if(twd.length){
+    lines.push('\nDieta: peso tendência atual '+tr[twd[twd.length-1]].toFixed(1)+' kg'
+      +(wr!=null?' | ritmo '+(wr>0?'+':'')+wr.toFixed(2)+' kg/sem':'')
+      +(t.observed!=null?' | gasto estimado ~'+t.tdee+' kcal (dados registrados pesam '+Math.round(t.conf*100)+'% na estimativa, ±'+t.sd+' kcal estatístico; média registrada '+t.avgK+' kcal, kcal em '+t.nK+' de '+t.span+' dias; na régua do registro)':(diet.settings.phase&&diet.settings.phase.prior!==diet.settings.tdee0?' | fase nova: gasto ancorado na fase anterior ~'+t.tdee+' kcal':' | gasto ainda em calibração (estimativa ~'+t.tdee+' kcal'+(t.why==='kcal'?', poucos dias com kcal registradas':'')+')'))
+      +(t.stale?' | ATENÇÃO: sem peso+kcal desde '+t.endISO+' ('+t.ageDays+' dias) — números de dieta desatualizados':'')
+      +' | objetivo: '+(diet.settings.mode==='fixed'?'meta fixa prescrita pela nutricionista':(diet.settings.mode==='maint'?'manutenção'+(maintInfo().tgt!=null?' com peso-alvo '+maintInfo().tgt+' kg (faixa ±'+MAINT_BAND+' kg; fora dela corrige '+MAINT_PCT+'%/sem; agora '+(maintInfo().inBand?'dentro':'fora')+' da faixa)':''):diet.settings.mode+' '+fmt(ratePct())+'% do peso/sem (~'+rateKg().toFixed(2)+' kg/sem)'))
+      +' | metas da semana (check-in semanal de '+W.start+', próximo '+W.next+'; meta '+W.status+'): '+tk.goal+' kcal, P '+MM.prot+'g / C '+MM.carbs+'g / G '+MM.fatG+'g');
+  }
+  const dates=[...new Set(history.map(h=>new Date(h.date).toLocaleDateString('pt-BR')))];
+  lines.push('\nTotal de sessões registradas: '+history.length+(dates.length?' | Últimas datas: '+dates.slice(-12).join(', '):''));
+  return lines.join('\n');
+}
+function geminiHttpError(status,detail,model){
+  const err=new Error('HTTP '+status+' — '+detail);
+  err.status=status;err.detail=detail;err.model=model;
+  return err;
+}
+/* uma chamada em streaming (streamGenerateContent + SSE): o texto chega em trechos enquanto é escrito,
+   então o app mostra a resposta aos poucos e só desiste se o modelo não começar ou travar no meio.
+   input = texto do usuário ou a conversa inteira (contents) — a retomada manda o que já foi escrito */
+async function geminiGenerate(model,systemText,input,onText){
+  const ctl=new AbortController();
+  let why=null, idle=null, text='', finish='';
+  const arm=(ms,kind)=>{clearTimeout(idle);idle=setTimeout(()=>{why=kind;ctl.abort()},ms)};
+  const total=setTimeout(()=>{why='total';ctl.abort()},AI_TOTAL_MS);
+  const contents=Array.isArray(input)?input:[{role:'user',parts:[{text:String(input)}]}];
+  arm(AI_FIRST_MS,'first');
+  try{
+    const r=await fetch(GEMINI_BASE+encodeURIComponent(model)+':streamGenerateContent?alt=sse',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+      cache:'no-store',
+      signal:ctl.signal,
+      body:JSON.stringify({
+        system_instruction:{parts:[{text:systemText}]},
+        contents,
+        generationConfig:geminiGenConfig(model)
+      })
+    });
+    if(!r.ok){
+      const raw=await r.text(); /* lê como texto para não perder a mensagem de erro */
+      let data={};
+      try{data=raw?JSON.parse(raw):{}}catch(_){}
+      if(Array.isArray(data))data=data[0]||{};
+      throw geminiHttpError(r.status,data?.error?.message||raw||r.statusText||'erro desconhecido',model);
+    }
+    const reader=r.body.getReader(), dec=new TextDecoder();
+    let buf='';
+    const eat=raw=>{
+      const line=raw.trim();
+      if(!line.startsWith('data:'))return;
+      let d;
+      try{d=JSON.parse(line.slice(5))}catch(_){return}
+      if(d.error)throw geminiHttpError(d.error.code||500,d.error.message||'erro no meio da resposta',model);
+      const c=d.candidates?.[0];
+      const t=(c?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('');
+      if(t){text+=t;arm(AI_IDLE_MS,'idle');if(onText)onText(text,model)}
+      if(c?.finishReason)finish=c.finishReason;
+      else if(!c&&d.promptFeedback?.blockReason)finish=d.promptFeedback.blockReason;
+    };
+    for(;;){
+      const{value,done}=await reader.read();
+      if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      let nl;
+      while((nl=buf.indexOf('\n'))>=0){const line=buf.slice(0,nl);buf=buf.slice(nl+1);eat(line)}
+    }
+    buf+=dec.decode();
+    if(buf.trim())eat(buf); /* último evento sem quebra de linha no fim */
+  }catch(e){
+    /* se já chegou parte do texto, entrega o que veio (a retomada completa depois) em vez de perder tudo */
+    if(text.trim()){
+      if(finish)return{text:text.trim(),model,finish,truncated:finish==='MAX_TOKENS',interrupted:false}; /* caiu depois do fim */
+      return{text:text.trim(),model,finish:'',truncated:true,interrupted:true,cause:why||(e?.status?'HTTP '+e.status:'rede')};
+    }
+    if(e?.name==='AbortError'){
+      const err=new Error(why==='first'?'Nenhum trecho de resposta em '+(AI_FIRST_MS/1000)+' s.':'Sem resposta em '+(AI_TOTAL_MS/1000)+' s.');
+      err.timeout=why||'total';err.model=model;
+      throw err;
+    }
+    /* o Safari devolve só "Load failed" quando a conexão não se completa */
+    if(e instanceof TypeError||/load failed|failed to fetch|network request failed|network error/i.test(e?.message||'')){
+      const err=new Error('Falha de rede ao acessar a Gemini API ('+(e?.message||'sem detalhe')+').');
+      err.network=true;
+      throw err;
+    }
+    throw e;
+  }finally{
+    clearTimeout(idle);clearTimeout(total);
+  }
+  text=text.trim();
+  if(!text){
+    const err=new Error('O Gemini respondeu sem texto (motivo: '+(finish||'desconhecido')+').');
+    err.status=200;err.finish=finish;err.model=model;
+    throw err;
+  }
+  /* a API sempre fecha com finishReason (STOP, MAX_TOKENS…) no último trecho: sem ele, o fluxo terminou antes da hora */
+  return{text,model,finish,truncated:finish==='MAX_TOKENS',interrupted:!finish};
+}
+/* tenta o modelo configurado e, se ele não existir mais, estiver sem cota/sobrecarregado ou não começar a responder, os seguintes.
+   Chave inválida, permissão e rede não são mascarados: outro modelo não resolveria.
+   hooks.models: ordem própria (a retomada começa pelo modelo que estava escrevendo) */
+async function geminiGenerateWithFallback(systemText,input,hooks={}){
+  const models=hooks.models?[...new Set(hooks.models.map(normalizeGeminiModel))]:geminiModelCandidates();
+  let lastError=null, configuredGone=false;
+  for(const model of models){
+    if(hooks.onModel)hooks.onModel(model);
+    try{
+      const res=await geminiGenerate(model,systemText,input,hooks.onText);
+      /* só grava outro modelo se o configurado deixou de existir; falta de cota e lentidão são passageiras */
+      res.persist=configuredGone;
+      return res;
+    }catch(e){
+      lastError=e;
+      const msg=String(e?.detail||e?.message||'').toLowerCase();
+      const gone=e?.status===404
+        ||(e?.status===400&&/model|not found|unsupported|not available|does not exist/.test(msg)&&!/api key/.test(msg))
+        ||(e?.status===403&&/model/.test(msg)&&!/api key/.test(msg));
+      const busy=e?.status===429||e?.status===500||e?.status===503||e?.status===504||e?.timeout==='first';
+      if(gone&&model===normalizeGeminiModel(aiModel))configuredGone=true;
+      if(gone||busy)continue;
+      throw e;
+    }
+  }
+  throw lastError||new Error('Nenhum modelo Gemini disponível.');
+}
+async function adoptModel(res){
+  if(res.persist&&res.model!==aiModel){aiModel=res.model;await sSet(K_MODEL,aiModel)}
+}
+function modelNote(before,res){
+  if(res.model===before)return '';
+  return res.persist
+    ?esc(before)+' não está mais disponível — o app passou a usar '+esc(res.model)+'.'
+    :esc(before)+' está sem cota, sobrecarregado ou lento agora; esta resposta veio do '+esc(res.model)+' (a configuração foi mantida).';
+}
+const aiSleep=ms=>new Promise(r=>setTimeout(r,ms));
+/* mantém a tela acesa enquanto a IA escreve: com a tela bloqueada o celular derruba a conexão */
+async function aiKeepAwake(on){
+  try{
+    if(on){
+      if(!aiWake&&navigator.wakeLock&&document.visibilityState==='visible'){
+        const l=await navigator.wakeLock.request('screen');
+        aiWake=l;l.addEventListener('release',()=>{if(aiWake===l)aiWake=null});
+        if(!aiBusy)aiKeepAwake(false); /* terminou enquanto o pedido estava pendente */
+      }
+    }else if(aiWake){const l=aiWake;aiWake=null;await l.release()}
+  }catch(_){aiWake=null}
+}
+let aiHiddenAt=0; /* última vez que o app foi para segundo plano com a IA trabalhando */
+document.addEventListener('visibilitychange',()=>{
+  if(!aiBusy)return;
+  if(document.visibilityState==='hidden')aiHiddenAt=Date.now();
+  else aiKeepAwake(true); /* o bloqueio de tela cai sozinho quando o app sai da tela */
+});
+function untilVisible(){
+  if(document.visibilityState!=='hidden')return Promise.resolve();
+  return new Promise(res=>{const f=()=>{if(document.visibilityState!=='hidden'){document.removeEventListener('visibilitychange',f);res()}};document.addEventListener('visibilitychange',f)});
+}
+function untilOnline(ms){
+  if(navigator.onLine!==false)return Promise.resolve();
+  return new Promise(res=>{let t=null;const f=()=>{window.removeEventListener('online',f);clearTimeout(t);res()};t=setTimeout(f,ms);window.addEventListener('online',f)});
+}
+/* ponto de retomada: fim da última linha ou frase completa — o pedaço cortado é reescrito pela continuação */
+function aiResumeBase(text){
+  let cut=text.lastIndexOf('\n')+1;
+  const re=/[.!?…](?=\s|$)/g;
+  let m;
+  while((m=re.exec(text)))if(m.index+1>cut)cut=m.index+1;
+  return text.slice(0,cut);
+}
+const aiNorm=l=>l.toLowerCase().replace(/[*_#>`•]/g,'').replace(/^\s*(\d+[.)]|[-+])\s*/,'').replace(/\s+/g,' ').trim();
+const aiFlat=s=>s.toLowerCase().replace(/[*_#>`•|]/g,'').replace(/^\s*(\d+[.)]|[-+])\s+/gm,'').replace(/\s+/g,' ').trim();
+/* junta o que já estava escrito com a continuação: tira o [FIM] e as linhas que o modelo repetiu no começo.
+   final=true quando a continuação terminou de vez */
+function aiJoin(base,cont,final){
+  let c=String(cont||'').replace(/\s*\[FIM\]\s*$/i,'');
+  if(!c.trim()||'[FIM]'.startsWith(c.trim().toUpperCase()))return base;
+  /* o modelo recomeçou a resposta do início: vale a versão nova (enquanto escreve, a mais longa das duas) */
+  const fb=aiFlat(base), fc=aiFlat(c), L=Math.min(60,fb.length,fc.length);
+  if(fc.length<20&&fb.startsWith(fc))return base; /* ainda não dá para saber */
+  if(L>=20&&fb.slice(0,L)===fc.slice(0,L))return final||fc.length>=fb.length?c:base;
+  const bl=base.split('\n').map(aiNorm).filter(Boolean);
+  const seen=new Set([...bl.filter(l=>l.length>=12),...bl.slice(-6)]);
+  const lines=c.split('\n');
+  let k=0;
+  for(let j=0;j<lines.length;j++){if(!lines[j].trim())continue;if(seen.has(aiNorm(lines[j]))){k=j+1;continue}break}
+  c=lines.slice(k).join('\n');
+  if(!c.trim())return base;
+  if(!base||/\n$/.test(base)||/^\s/.test(c))return base+c;
+  const block=/^(#{1,6}\s|[-*•+]\s|\d{1,3}[.)]\s|\||([-*_])(\s*\2){2,}\s*$)/.test(c);
+  return base+(block?'\n':' ')+c;
+}
+/* aviso de espera com contador de segundos e o modelo da vez (pinta onde a aba IA estiver aberta) */
+function aiWaiting(label){
+  const t0=Date.now();
+  let model=normalizeGeminiModel(aiModel), on=true;
+  const paint=()=>{const el=document.getElementById('aires');if(on&&el)el.innerHTML='<div class="card"><div class="note"><span class="spin"></span>'+esc(label)+' — '+esc(model)+' · '+Math.round((Date.now()-t0)/1000)+' s<br><span style="font-size:12px;color:var(--faint)">Mantenha o app aberto até terminar.</span></div></div>'};
+  paint();
+  const iv=setInterval(paint,1000);
+  return{
+    setModel:m=>{model=m;paint()},
+    stop:()=>{on=false;clearInterval(iv)},
+    secs:()=>Math.round((Date.now()-t0)/1000)
+  };
+}
+function showGeminiError(target,e){
+  const st=e?.status||null;
+  const raw=e?.detail||e?.message||'erro desconhecido';
+  let title='Falha na chamada', hint='';
+  if(e?.timeout){title='Tempo esgotado';hint=e.timeout==='first'?'Nenhum dos modelos tentados começou a responder em '+(AI_FIRST_MS/1000)+' s. Costuma ser sobrecarga do lado do Google — tente de novo em alguns minutos.':'A resposta não terminou a tempo. Tente de novo.'}
+  else if(e?.network){title='Falha de conexão';hint='A chamada não chegou ao fim. Causas comuns: internet instável, bloqueador de conteúdo/VPN, ou o app ter ido para segundo plano durante a análise (no iPhone isso derruba a conexão). Toque em "Testar conexão": se o teste passar e só a análise falhar, o problema é a duração da resposta, não a chave.'}
+  else if(st===400){title='Requisição rejeitada';hint=/api key/i.test(raw)?'A chave não foi aceita — gere uma nova no aistudio.google.com.':'Confira o nome do modelo configurado.'}
+  else if(st===401){title='Chave não autorizada';hint='Gere ou confira a chave no aistudio.google.com.'}
+  else if(st===403){title='Acesso negado';hint='A chave foi reconhecida, mas não tem permissão (revogada, com restrição de site/API ou projeto bloqueado). Confira no aistudio.google.com.'}
+  else if(st===404){title='Modelo não encontrado';hint='Nenhum destes modelos está disponível para a sua chave: '+geminiModelCandidates().join(', ')+'.'}
+  else if(st===429){title='Limite do free tier atingido';hint='Todos os modelos tentados estão sem cota agora. As cotas renovam — tente mais tarde.'}
+  else if(st>=500){title='Gemini temporariamente indisponível';hint='O servidor do Google está com erro ou sobrecarregado. Tente em alguns minutos.'}
+  else if(st===200){title='Resposta vazia';hint=e?.finish==='MAX_TOKENS'?'O raciocínio do modelo consumiu todo o limite de tokens antes do texto.':(/SAFETY|BLOCK|PROHIBITED/i.test(e?.finish||'')?'Resposta bloqueada pelo filtro de segurança do Google.':'')}
+  target.innerHTML='<div class="card"><div class="note"><b>'+esc(title)+'</b><br><br><span class="tag">'+esc(String(raw).slice(0,350))+'</span>'+(hint?'<br><br>'+esc(hint):'')+'</div></div>';
+}
+function aiPaint(){
+  const el=document.getElementById('aires'), j=aiJob;
+  if(!el||!j||(!j.text&&!j.done))return; /* antes do 1º trecho quem pinta é o aviso de espera */
+  const sub=esc(j.model||'')+' · '+(j.done?j.secs+' s':esc(j.status||'escrevendo…'));
+  el.innerHTML='<div class="card"><h3>'+esc(j.title)+'</h3><div class="sub">'+sub+'</div>'
+    +(j.note?'<p class="note" style="margin-top:6px;font-size:12px">'+j.note+'</p>':'')
+    +'<div class="ai-out">'+mdToHtml(j.text)+'</div>'
+    +(j.done&&j.stuck?'<p class="note ai-stuck">⚠️ <i>'+esc(j.stuck)+'</i></p><button class="btn ghost" id="aicont" style="margin-top:10px">Continuar de onde parou</button>':'')
+    +'</div>';
+  const b=document.getElementById('aicont');
+  if(b)b.onclick=()=>aiContinue();
+}
+async function runAI(question){
+  const target=document.getElementById('aires');
+  if(!apiKey){
+    target.innerHTML='<div class="card"><div class="note">Configure primeiro a <b>chave do Gemini</b> na seção abaixo e toque em <b>Testar conexão</b>.</div></div>';
+    return;
+  }
+  if(aiBusy)return;
+  const sys='Você é um coach de musculação baseado em evidências (Helms, Israetel, Schoenfeld). Responda em português brasileiro, direto e prático, em no máximo ~300 palavras. Diferencie variação normal de estagnação real. Aponte estagnações, padrões de RIR/fadiga e ações concretas com números quando os dados permitirem. Use **negrito** e listas curtas quando ajudar. Não repita os dados de volta — interprete-os — e não invente nada que não esteja neles. O treino atual é só o das rotinas do "Programa atual"; rotinas antigas aparecem apenas como contexto e não significam que o atleta está trocando de divisão.';
+  const user=buildContext()+'\n\n'+(question?('Pergunta do atleta: '+question):'Faça uma análise do progresso: o que evolui, o que estagnou, padrão de RIR e risco de fadiga em déficit, e 2-3 ações concretas para as próximas 2 semanas.');
+  const prev=aiJob;
+  aiJob={title:question?'Resposta':'Análise do progresso',sys,user,text:'',model:null,before:aiModel,t0:Date.now(),status:'',note:'',stuck:'',done:false};
+  const ok=await aiDrive(question?'Perguntando':'Analisando seu histórico');
+  if(!ok&&!aiJob.text)aiJob=prev; /* falhou sem texto: ao voltar para a aba, continua aparecendo a última resposta */
+}
+/* botão "Continuar de onde parou" (quando as retomadas automáticas não bastaram) */
+async function aiContinue(){
+  const j=aiJob;
+  if(aiBusy||!j||!j.stuck)return;
+  j.stuck='';j.done=false;j.status='retomando de onde parou…';j.t0=Date.now();
+  aiPaint();
+  await aiDrive('Retomando');
+}
+/* gera a resposta do aiJob; se a conexão cair no meio (ou o texto bater no limite de tokens), pede ao modelo
+   que continue do ponto onde parou — até AI_AUTO_RESUMES vezes — esperando o app voltar à tela e a internet voltar */
+async function aiDrive(label){
+  const j=aiJob;
+  aiBusy=true;aiKeepAwake(true);
+  let w=j.text?null:aiWaiting(label), first=null, resumes=0, retried=false;
+  const stopW=()=>{if(w){w.stop();w=null}};
+  try{
+    for(;;){
+      let base=j.text?aiResumeBase(j.text):'';
+      if(j.text&&!base.trim()){j.text='';base='';if(!w)w=aiWaiting(label)} /* nada aproveitável: recomeça */
+      const input=[{role:'user',parts:[{text:j.user}]}];
+      if(base)input.push({role:'model',parts:[{text:base}]},{role:'user',parts:[{text:AI_CONTINUE}]});
+      const tA=Date.now();
+      let res;
+      try{
+        res=await geminiGenerateWithFallback(j.sys,input,{
+          models:base&&j.model?[j.model,...geminiModelCandidates()]:null,
+          onModel:m=>{if(w)w.setModel(m)},
+          onText:(txt,m)=>{stopW();j.model=m;j.status='escrevendo…';j.text=base?aiJoin(base,txt):txt;aiPaint()}
+        });
+      }catch(e){
+        if(!base){
+          /* caiu antes do 1º trecho porque o app saiu da tela (ou a internet caiu): tenta de novo uma vez ao voltar */
+          if(e?.network&&!retried&&(aiHiddenAt>=tA||document.visibilityState==='hidden'||navigator.onLine===false)){
+            retried=true;
+            await untilVisible();await untilOnline(20000);await aiSleep(800);
+            continue;
+          }
+          throw e;
+        }
+        res={text:'',model:j.model,finish:'',interrupted:true,err:e}; /* a retomada falhou antes de escrever: o parcial fica */
+      }
+      stopW();
+      if(!first&&!res.err)first=res;
+      j.model=res.model||j.model;
+      if(res.text)j.text=base?aiJoin(base,res.text,!res.interrupted&&!res.truncated):res.text;
+      const odd=!!res.finish&&!/^(STOP|MAX_TOKENS)$/.test(res.finish);
+      if(!res.interrupted&&!res.truncated&&!odd){j.stuck='';break}
+      if(!odd&&resumes<AI_AUTO_RESUMES){
+        resumes++;
+        const what=res.interrupted?'conexão caiu':'resposta longa';
+        j.status=what+(document.visibilityState==='hidden'?' — retoma quando o app voltar para a tela':' — retomando de onde parou…');
+        aiPaint();
+        await untilVisible();
+        await untilOnline(20000);
+        if(res.interrupted)await aiSleep(1200);
+        j.status=what+' — retomando de onde parou…';aiPaint();
+        continue;
+      }
+      j.stuck=(odd?'O Google interrompeu a resposta (motivo: '+res.finish+')':res.interrupted?'A conexão caiu no meio da resposta':'A resposta passou do limite de tamanho')
+        +(resumes?' e as retomadas automáticas não completaram':'')+' — o texto acima está incompleto.';
+      break;
+    }
+    j.done=true;j.status='';j.secs=Math.round((Date.now()-j.t0)/1000);
+    if(first){await adoptModel(first);j.note=modelNote(j.before,first)}
+    aiPaint();
+    return true;
+  }catch(e){
+    stopW();
+    j.done=true;
+    const el=document.getElementById('aires');
+    if(el)showGeminiError(el,e);else toast('⚠️ A IA não respondeu — tente de novo na aba IA');
+    return false;
+  }finally{
+    stopW();aiBusy=false;aiKeepAwake(false);
+  }
+}
+/* markdown do Gemini → HTML (linha a linha): títulos, separadores, listas com e sem número (com subníveis),
+   tabelas, negrito/itálico e código. O texto é escapado antes — nada do modelo vira HTML de verdade */
+function mdToHtml(md){
+  const inl=s=>s.replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/__(.+?)__/g,'<b>$1</b>').replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*(?!\w)/g,'$1<i>$2</i>');
+  const out=[], st=[];
+  let para=[], tbl=null;
+  const flushP=()=>{if(para.length){out.push('<p>'+para.map(inl).join('<br>')+'</p>');para=[]}};
+  const flushT=()=>{if(tbl){out.push('<div class="ai-tbl"><table>'+tbl.map((r,i)=>'<tr>'+r.map(c=>i?'<td>'+inl(c)+'</td>':'<th>'+inl(c)+'</th>').join('')+'</tr>').join('')+'</table></div>');tbl=null}};
+  const closeL=()=>{while(st.length)out.push('</li></'+st.pop().tag+'>')};
+  for(const raw of esc(String(md||'')).replace(/\r/g,'').split('\n')){
+    const line=raw.replace(/\s+$/,'');
+    let m;
+    if(/^\s*\|.*\|$/.test(line)){
+      flushP();closeL();
+      const cells=line.trim().slice(1,-1).split('|').map(c=>c.trim());
+      if(!cells.every(c=>/^:?-{2,}:?$/.test(c)))(tbl=tbl||[]).push(cells);
+      continue;
+    }
+    flushT();
+    if(!line.trim()){flushP();continue}
+    if((m=line.match(/^\s*#{1,6}\s+(.*?)\s*#*$/))){flushP();closeL();out.push('<h4>'+inl(m[1])+'</h4>');continue}
+    if(/^\s*([-*_])(\s*\1){2,}$/.test(line)){flushP();closeL();out.push('<hr>');continue}
+    if((m=line.match(/^(\s*)(?:[-*•+]|(\d{1,3})[.)])\s+(.*)$/))){
+      flushP();
+      const ind=m[1].replace(/\t/g,'    ').length, tag=m[2]?'ol':'ul';
+      while(st.length&&st[st.length-1].ind>ind)out.push('</li></'+st.pop().tag+'>');
+      if(st.length&&st[st.length-1].ind===ind&&st[st.length-1].tag!==tag)out.push('</li></'+st.pop().tag+'>');
+      if(st.length&&st[st.length-1].ind===ind)out.push('</li><li>');
+      else{st.push({tag,ind});out.push('<'+tag+(m[2]&&m[2]!=='1'?' start="'+m[2]+'"':'')+'><li>')}
+      out.push(inl(m[3]));
+      continue;
+    }
+    if(st.length&&/^\s/.test(line)){out.push('<br>'+inl(line.trim()));continue} /* continuação do item */
+    closeL();
+    para.push(line.trim().replace(/^&gt;\s?/,''));
+  }
+  flushT();flushP();closeL();
+  return out.join('');
+}
+
+/* ============ diet / adaptive TDEE (inspirado no método adaptativo do MacroFactor, sem equivalência exata) ============ */
+const KCAL_PER_KG=7700, EWMA_ALPHA=0.2;
+const TDEE_WINDOW=28;   /* dias de dados usados no gasto observado */
+const PRIOR_SD0=300;    /* incerteza da estimativa por fórmula, kcal/dia (equações acertam ±10% em ~80% das pessoas) */
+const SETTLE_DAYS=10;   /* dias de uma fase nova com peso reduzido: água, glicogênio e conteúdo intestinal mudam rápido */
+const NOISE_AC=1.5;     /* as oscilações de água duram alguns dias: aumenta a incerteza da inclinação (ruído autocorrelacionado) */
+const RATE_MAX={deficit:1,surplus:0.5}; /* % do peso por semana — Helms 2014 (déficit 0,5–1%) e Iraki 2019 (ganho 0,25–0,5%) */
+const TEF=0.1;          /* efeito térmico do alimento ≈10% das kcal: comer mais eleva um pouco o gasto (e vice-versa) */
+const DRIFT=30;         /* kcal/√dia: o gasto real muda com o tempo (adaptação, atividade) — a âncora perde força à medida que envelhece */
+const STALE_DAYS=10;    /* sem peso + kcal há mais que isso: o gasto fica marcado como antigo e a meta para de se mexer */
+const GAP_DAYS=14;      /* pausa de pesagens desse tamanho: a janela recomeça depois dela (o antes não descreve o agora) */
+const MIN_COVER=0.3;    /* fração mínima dos dias da janela com kcal registradas (e pelo menos MIN_KDAYS dias); abaixo
+                           da cobertura total, a penalidade de lacunas reduz o peso dos dados aos poucos */
+const MIN_KDAYS=7;
+const DAY_SD_MIN=250;   /* variação mínima de um dia para o outro (kcal): dias registrados iguais não viram certeza */
+const MAINT_BAND=0.68;  /* kg (1,5 lb, como no MacroFactor): dentro dessa faixa do peso-alvo, a meta acompanha o gasto */
+const MAINT_PCT=0.15;   /* % do peso/sem: fora da faixa, leve déficit ou superávit para voltar ao peso-alvo */
+const GOAL_MAX=6000;    /* limites internos da meta automática (não são validação clínica individual) */
+const goalMin=()=>diet.settings.profile&&diet.settings.profile.sex==='m'?1500:1200;
+const MISSING_GAP=400;  /* quanto a média dos dias sem registro pode diferir da dos registrados (kcal): penaliza lacunas */
+async function saveDiet(){await sSet(K_DIET,diet)}
+const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+function dietDates(){return Object.keys(diet.entries).sort()}
+const dayNum=d=>Math.round(new Date(d).getTime()/864e5);
+function computeTrend(){ /* só para o gráfico e o painel; o gasto usa as pesagens do dia */
+  const wd=dietDates().filter(d=>diet.entries[d].weight!=null&&diet.entries[d].weight!=='');
+  const trend={};
+  if(!wd.length)return trend;
+  let t=+diet.entries[wd[0]].weight;
+  trend[wd[0]]=t;
+  for(let i=1;i<wd.length;i++){
+    const w0=+diet.entries[wd[i-1]].weight, w1=+diet.entries[wd[i]].weight;
+    const gap=Math.max(1,Math.round((new Date(wd[i])-new Date(wd[i-1]))/86400000));
+    for(let g=1;g<=gap;g++){
+      const wi=w0+(w1-w0)*g/gap; /* interpola dias sem pesagem */
+      t=t+EWMA_ALPHA*(wi-t);
+    }
+    trend[wd[i]]=t;
+  }
+  return trend;
+}
+function olsSlope(pairs){ /* regressão linear simples: [ [dias,y] ] → kg/dia */
+  const n=pairs.length;
+  const mx=pairs.reduce((s,p)=>s+p[0],0)/n, my=pairs.reduce((s,p)=>s+p[1],0)/n;
+  let num=0,den=0;
+  for(const[x,y]of pairs){num+=(x-mx)*(y-my);den+=(x-mx)*(x-mx)}
+  return den?num/den:0;
+}
+function curWeight(){
+  const tr=computeTrend(), wd=Object.keys(tr).sort();
+  return wd.length?tr[wd[wd.length-1]]:((diet.settings.profile&&diet.settings.profile.w)||86);
+}
+/* ritmo-alvo em % do peso por semana, guardado por objetivo (déficit e superávit têm faixas diferentes);
+   migra o antigo "rate" em kg/sem; teto por objetivo */
+function ratePct(){
+  const s=diet.settings;
+  if(!s.ratePcts){
+    const legacy=s.ratePct!=null?+s.ratePct:(s.rate!=null?s.rate/curWeight()*100:null);
+    s.ratePcts={deficit:0.47,surplus:0.3};
+    if(legacy!=null&&(s.mode==='deficit'||s.mode==='surplus'))s.ratePcts[s.mode]=Math.round(legacy*100)/100;
+  }
+  const v=s.ratePcts[s.mode]??(s.mode==='surplus'?0.3:0.47);
+  return Math.min(RATE_MAX[s.mode]||1,Math.max(0.1,+v));
+}
+const rateKg=()=>ratePct()/100*curWeight();              /* kg/sem */
+const rateKcal=()=>rateKg()*KCAL_PER_KG/7;              /* kcal/dia de déficit ou superávit */
+/* Gasto (TDEE) por balanço energético — kcal registradas − variação do peso × 7.700 —, combinado com a
+   estimativa anterior pela precisão de cada um (média ponderada pelo inverso da variância):
+   · a inclinação vem de regressão ponderada nas pesagens do dia (a média móvel atrasa no começo e enviesava o gasto);
+   · a confiança cresce com a quantidade e a estabilidade dos dados, não com um prazo fixo;
+   · numa fase nova (troca de objetivo ou de meta), os dados anteriores saem da janela, os primeiros dias valem pouco
+     e a fase começa ancorada no gasto da fase anterior.
+   O número fica na régua do seu registro: se você registra sempre menos do que come, ele sai menor que o gasto
+   real; com registro e padrão estáveis, o acompanhamento do peso compensa parte desse erro no ritmo. */
+function computeTDEE(){
+  const s=diet.settings, ph=s.phase||null;
+  const prior=ph&&ph.prior?+ph.prior:+s.tdee0, priorSD=ph&&ph.priorSD?+ph.priorSD:PRIOR_SD0;
+  const base={tdee:Math.round(prior),observed:null,conf:0,sd:Math.round(priorSD),avgK:null,days:0,span:0,nK:0,cover:null,
+    prior:Math.round(prior),stale:false,ageDays:null,endISO:null,why:null};
+  const all=dietDates(), has=(d,f)=>diet.entries[d][f]!=null&&diet.entries[d][f]!=='';
+  const wd=all.filter(d=>has(d,'weight')), kdAll=all.filter(d=>has(d,'kcal')&&!diet.entries[d].inc);
+  if(!wd.length)return base;
+  /* a janela de balanço termina no último dia que tem os dois registros (peso e kcal) */
+  const lastW=dayNum(wd[wd.length-1]), lastK=kdAll.length?dayNum(kdAll[kdAll.length-1]):null;
+  const endN=lastK!=null?Math.min(lastW,lastK):lastW;
+  base.ageDays=dayNum(todayISO())-endN;base.stale=base.ageDays>STALE_DAYS;
+  base.endISO=new Date(endN*864e5).toISOString().slice(0,10);
+  if(lastK==null||lastW-lastK>=TDEE_WINDOW){base.why='kcal';return base}
+  const phN=ph&&ph.start?dayNum(ph.start):null;
+  let startN=Math.max(endN-(TDEE_WINDOW-1),phN??-Infinity);
+  /* depois de uma pausa longa nas pesagens, só vale o que veio depois dela */
+  const wN=wd.map(dayNum).filter(n=>n<=endN);
+  for(let i=1;i<wN.length;i++)if(wN[i]-wN[i-1]>=GAP_DAYS&&wN[i]>startN)startN=wN[i];
+  /* ingestão e peso no mesmo período: a janela começa no primeiro dia com kcal */
+  const firstK=kdAll.map(dayNum).find(n=>n>=startN&&n<=endN);
+  if(firstK!=null&&firstK>startN)startN=firstK;
+  const wOf=n=>{
+    if(phN==null)return 1;
+    const k=n-phN;
+    if(k<0)return 0;
+    if(k>=SETTLE_DAYS)return 1;
+    return k<4?0.1:0.1+0.9*(k-3)/(SETTLE_DAYS-3);
+  };
+  const inWin=d=>{const n=dayNum(d);return n>=startN&&n<=endN};
+  const pts=wd.filter(inWin).map(d=>({x:dayNum(d)-endN,y:+diet.entries[d].weight,w:wOf(dayNum(d))})).filter(p=>p.w>0);
+  const kd=kdAll.filter(inWin);
+  let dayW=0;for(let n=startN;n<=endN;n++)dayW+=wOf(n);
+  const kw=kd.map(d=>({k:+diet.entries[d].kcal,w:wOf(dayNum(d))}));
+  const KW=kw.reduce((a,o)=>a+o.w,0);
+  const cover=dayW>0?Math.min(1,KW/dayW):0;
+  Object.assign(base,{nK:kd.length,cover,span:endN-startN+1});
+  const W=pts.reduce((a,p)=>a+p.w,0);
+  if(pts.length<4||W<2){base.why='peso';return base}
+  if(kd.length<MIN_KDAYS||cover<MIN_COVER){base.why='kcal';return base}
+  const mx=pts.reduce((a,p)=>a+p.w*p.x,0)/W, my=pts.reduce((a,p)=>a+p.w*p.y,0)/W;
+  let sxx=0,sxy=0;
+  for(const p of pts){sxx+=p.w*(p.x-mx)**2;sxy+=p.w*(p.x-mx)*(p.y-my)}
+  if(sxx/W<3){base.why='peso';return base} /* dados espalhados por menos de ~6 dias */
+  const slope=sxy/sxx;
+  let sse=0;
+  for(const p of pts)sse+=p.w*(p.y-my-slope*(p.x-mx))**2;
+  const sig2=Math.max(sse/Math.max(1,W-2),0.15**2);
+  const seSlope=NOISE_AC*Math.sqrt(sig2/sxx);
+  const avgK=kw.reduce((a,o)=>a+o.w*o.k,0)/KW;
+  const varK=kw.reduce((a,o)=>a+o.w*(o.k-avgK)**2,0)/KW;
+  const nK=KW*KW/kw.reduce((a,o)=>a+o.w*o.w,0);
+  const sdDay=Math.max(Math.sqrt(varK),DAY_SD_MIN);
+  const observed=avgK-slope*KCAL_PER_KG;
+  /* incerteza do gasto medido: inclinação do peso + média de ingestão (com piso de variação diária) + dias sem
+     registro (podem ter sido diferentes dos registrados). O "peso dos dados" sai da comparação com a anterior */
+  const varObs=(seSlope*KCAL_PER_KG)**2+sdDay*sdDay/Math.max(1,nK)+((1-cover)*MISSING_GAP)**2;
+  const age=Math.max(0,endN-(phN??dayNum(wd[0])));
+  const varPrior=priorSD*priorSD+DRIFT*DRIFT*age;
+  const conf=varPrior/(varPrior+varObs);
+  /* dias sem kcal concentrados no fim de semana: se você come diferente nesses dias, o gasto medido fica na régua
+     dos dias úteis — a meta ainda se corrige pelo peso, mas só enquanto esse padrão não mudar */
+  const kSet=new Set(kd.map(dayNum)), wkend=n=>{const g=new Date(n*864e5).getUTCDay();return g===0||g===6};
+  let missE=0,missW=0,nE=0,nW=0;
+  for(let n=startN;n<=endN;n++){const e=wkend(n);if(e)nE++;else nW++;if(!kSet.has(n)){if(e)missE++;else missW++}}
+  const weekendGap=nE>=4&&missE/nE>=0.5&&(nW?missW/nW:0)<=0.2;
+  /* a incerteza do gasto cresce com o tempo desde o último dado (o gasto real muda) */
+  const sdNow=Math.sqrt(varPrior*varObs/(varPrior+varObs)+DRIFT*DRIFT*Math.max(0,base.ageDays));
+  return Object.assign(base,{tdee:Math.round(conf*observed+(1-conf)*prior),observed:Math.round(observed),conf,
+    sd:Math.round(sdNow),avgK:Math.round(avgK),days:Math.round(-pts[0].x),weekendGap});
+}
+function weeklyRate(){
+  const trend=computeTrend();
+  const wd=Object.keys(trend).sort();
+  if(wd.length<3)return null;
+  const endT=new Date(wd[wd.length-1]).getTime();
+  const win=wd.filter(d=>(endT-new Date(d).getTime())/86400000<=14);
+  if(win.length<3)return null;
+  if((endT-new Date(win[0]).getTime())/86400000<5)return null;
+  return olsSlope(win.map(d=>[(new Date(d).getTime()-endT)/86400000,trend[d]]))*7;
+}
+/* manutenção com peso-alvo (a "manutenção dinâmica" do MacroFactor): perto do alvo, meta = gasto; longe, corrige devagar */
+function maintInfo(){
+  const s=diet.settings, w=curWeight(), tgt=s.maintTarget!=null&&isFinite(+s.maintTarget)?+s.maintTarget:null;
+  const kc=Math.round(MAINT_PCT/100*w*KCAL_PER_KG/7);
+  if(tgt==null)return{tgt:null,w,diff:0,inBand:true,adj:0,kc};
+  const diff=w-tgt, inBand=Math.abs(diff)<=MAINT_BAND;
+  return{tgt,w,diff,inBand,adj:inBand?0:(diff>0?-kc:kc),kc};
+}
+function maintText(){
+  const m=maintInfo();
+  if(m.tgt==null)return'Manutenção: a meta acompanha o gasto. Defina um peso-alvo para o app corrigir desvios.';
+  return`Peso-alvo ${fmt(m.tgt)} kg (agora ${m.diff>=0?'+':''}${fmt(m.diff.toFixed(1))} kg): dentro de ±${fmt(MAINT_BAND)} kg a meta acompanha o gasto; fora disso, um leve déficit ou superávit de ${fmt(MAINT_PCT)}% do peso/sem (~${fmt(m.kc)} kcal/dia) puxa de volta — como a manutenção dinâmica do MacroFactor.`;
+}
+/* meta planejada para o objetivo atual, sem o amortecimento semanal */
+function planGoal(){
+  const s=diet.settings, t=computeTDEE();
+  if(s.mode==='fixed')return Math.round((s.fixed&&+s.fixed.kcal)||t.tdee);
+  const adj=rateKcal();
+  return Math.round(s.mode==='deficit'?t.tdee-adj:(s.mode==='surplus'?t.tdee+adj:t.tdee+maintInfo().adj));
+}
+/* troca de fase: o gasto atual vira a âncora da fase nova (ajustado pelo efeito térmico da mudança de ingestão) */
+function startPhase(oldGoal,newGoal){
+  const t=computeTDEE(), s=diet.settings;
+  const shift=(oldGoal!=null&&newGoal!=null)?TEF*(newGoal-oldGoal):0;
+  s.phase={start:todayISO(),prior:Math.round(t.tdee+shift),priorSD:Math.round(Math.min(350,Math.max(120,t.sd+50))),fromData:t.observed!=null};
+  s.lastCoach=null;
+}
+function phaseDay(){const ph=diet.settings.phase;return ph&&ph.start?dayNum(todayISO())-dayNum(ph.start):null}
+/* ===== check-in semanal (como no MacroFactor): num dia fixo da semana o app reavalia o gasto e define as kcal e os
+   macros da semana; entre um check-in e outro, as metas ficam fixas. O cálculo do gasto e o passo da meta (no máximo
+   ±200 kcal, só com gasto medido em dados recentes) são os do algoritmo validado; do MacroFactor vêm o dia fixo e a
+   exigência de dados da semana para mexer na meta (pelo menos 4 dias com kcal e 1 pesagem nos últimos 7 dias) */
+const WEEKDAYS=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+const isoOf=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function checkinDow(){
+  const s=diet.settings;
+  if(s.checkinDay!=null&&+s.checkinDay>=0&&+s.checkinDay<=6)return +s.checkinDay;
+  return s.lastCoach&&okISO(s.lastCoach.date)?new Date(s.lastCoach.date+'T12:00:00').getDay():1;
+}
+/* próximo dia de check-in, estritamente depois da data dada */
+function nextCheckin(afterISO){
+  const d=new Date(afterISO+'T12:00:00');
+  let add=(checkinDow()-d.getDay()+7)%7;if(add===0)add=7;
+  d.setDate(d.getDate()+add);return isoOf(d);
+}
+const daysTo=iso=>dayNum(iso)-dayNum(todayISO());
+const dowDate=iso=>iso?WEEKDAYS[new Date(iso+'T12:00:00').getDay()]+', '+iso.slice(8,10)+'/'+iso.slice(5,7):'';
+/* dados da semana que termina no check-in: kcal nos 7 dias anteriores e pesagem nos últimos 7 dias (inclui hoje) */
+function weekDataOk(){
+  const tN=dayNum(todayISO());let k=0,w=0;
+  for(const d of dietDates()){
+    const n=dayNum(d), e=diet.entries[d];
+    if(n>=tN-7&&n<tN&&e.kcal!=null&&e.kcal!==''&&!e.inc)k++;
+    if(n>tN-7&&n<=tN&&e.weight!=null&&e.weight!=='')w++;
+  }
+  return{ok:k>=4&&w>=1,k,w};
+}
+/* fixa as metas da semana: kcal + macros calculados agora (peso-tendência de hoje) e guardados até o próximo check-in */
+function makeWeek(goal,t,status,kind,next){
+  const s=diet.settings, today=todayISO(), M=computeMacros({goal});
+  s.week={start:today,next,kcal:goal,prot:M.prot,carb:M.carbs,fat:M.fatG,sum:M.sum,warn:M.warn||'',
+    tdee:t.tdee,sd:t.sd,conf:Math.round(t.conf*100),measured:t.observed!=null,weight:Math.round(curWeight()*10)/10,
+    mode:s.mode,ratePct:(s.mode==='deficit'||s.mode==='surplus')?ratePct():null,status,kind};
+  if(kind==='checkin'){
+    const h=(s.checkins||[]).filter(c=>c.date!==today);
+    h.push({date:today,kcal:goal,prot:M.prot,carb:M.carbs,fat:M.fatG,tdee:t.tdee,measured:t.observed!=null,weight:s.week.weight,mode:s.mode,status});
+    s.checkins=h.slice(-26);
+  }
+}
+/* meta da semana. O 1º check-in (início ou troca de objetivo) parte do plano atual; nos seguintes, a meta só se move
+   com gasto medido, dados recentes e semana com dados suficientes; sem isso, fica onde estava ("mantida") */
+function targetKcal(){
+  const s=diet.settings, t=computeTDEE();
+  const base=t.tdee, observed=t.observed!=null, today=todayISO();
+  if(s.checkinDay==null)s.checkinDay=checkinDow(); /* fixa o dia (antes: 7 dias depois do último ajuste) */
+  if(s.mode==='maint'&&s.maintTarget==null&&Object.keys(computeTrend()).length)s.maintTarget=Math.round(curWeight()*10)/10;
+  if(s.mode==='fixed'){
+    const goal=planGoal(), due=!s.week||s.week.mode!=='fixed'||today>=s.week.next;
+    if(due||s.week.dirty||s.week.kcal!==goal){makeWeek(goal,t,'prescrição da nutricionista',due?'checkin':'ajuste',due||!realISO(s.week.next)?nextCheckin(today):s.week.next);saveDiet()}
+    return{goal,base,observed,next:daysTo(s.week.next),nextISO:s.week.next,changed:false,fixed:true,checkedIn:due};
+  }
+  const raw=planGoal(), lo=goalMin(), clamp=g=>Math.min(GOAL_MAX,Math.max(lo,g));
+  const lc=s.lastCoach&&isFinite(+s.lastCoach.goal)&&+s.lastCoach.goal>=800&&okISO(s.lastCoach.date)?s.lastCoach:null;
+  if(!lc){
+    const goal=clamp(raw);
+    s.lastCoach={date:today,goal};
+    makeWeek(goal,t,observed&&!t.stale?'meta do objetivo, com o gasto medido':'meta do objetivo, com o gasto estimado','checkin',nextCheckin(today));saveDiet();
+    return{goal,base,observed,raw,next:daysTo(s.week.next),nextISO:s.week.next,changed:false,checkedIn:true,paused:t.stale,recal:!observed,fromStale:t.stale&&observed,floor:goal!==raw};
+  }
+  const cur=clamp(+lc.goal), nx=nextCheckin(lc.date);
+  if(today<nx){
+    /* no meio da semana: metas fixas; só se refazem se a configuração mudou (objetivo, ritmo, proteína…) */
+    if(!s.week||s.week.dirty||s.week.mode!==s.mode||s.week.kcal!==cur){makeWeek(cur,t,s.week?(s.week.dirty==='backup'?'recalculada a partir do backup restaurado':'ajustada no meio da semana (mudança de configuração)'):'metas da semana','ajuste',nx);saveDiet()}
+    return{goal:cur,base,observed,raw,next:daysTo(nx),nextISO:nx,changed:false,paused:t.stale,recal:!observed,floor:cur!==+lc.goal};
+  }
+  /* check-in */
+  const wk=weekDataOk();
+  let goal=cur,status,want=cur;
+  if(t.stale)status='mantida — sem dados recentes';
+  else if(!observed)status='mantida — o gasto ainda não pode ser medido';
+  else if(!wk.ok)status=`mantida — a semana teve ${wk.k} dia(s) com kcal e ${wk.w} pesagem(ns); são precisos 4 e 1`;
+  else{want=cur+Math.max(-200,Math.min(200,raw-cur));goal=clamp(want);status=goal===cur?'mantida — gasto estável':'atualizada pelo gasto medido'}
+  if(s.mode==='maint'){const m=maintInfo();if(m.tgt!=null)status+=m.inBand?' · peso dentro da faixa do alvo':` · peso ${m.diff>0?'acima':'abaixo'} da faixa do alvo: leve ${m.diff>0?'déficit':'superávit'}`}
+  s.lastCoach={date:today,goal};
+  makeWeek(goal,t,status,'checkin',nextCheckin(today));saveDiet();
+  return{goal,base,observed,raw,next:daysTo(s.week.next),nextISO:s.week.next,changed:goal!==+lc.goal,checkedIn:true,status,paused:t.stale,recal:!observed,floor:want!==goal||cur!==+lc.goal};
+}
+/* configuração mudou no meio da semana: as metas da semana são refeitas na hora (sem contar como check-in) */
+function invalidateWeek(){if(diet.settings.week)diet.settings.week.dirty=true}
+/* metas da semana para a tela e para a IA (garante o check-in do dia, se for o caso) */
+function weekPlan(){
+  const tk=targetKcal(), W=diet.settings.week;
+  return{tk,W,M:{kcal:W.kcal,prot:W.prot,carbs:W.carb,fatG:W.fat,sum:W.sum,warn:W.warn,pk:W.prot*4,ck:W.carb*4,fk:W.fat*9,wkg:W.weight}};
+}
+/* mudança de configuração: a meta atual é deslocada pelo efeito da mudança no plano — não é recriada do zero.
+   Mudança grande de ingestão (≥200 kcal) abre fase nova; proteína e gordura não mexem na meta. Reestimativa do
+   gasto inicial (calculadora) sem nenhum dado medido refaz a meta com a estimativa nova */
+function applySettingsChange(planBefore,goalBefore,reestimate){
+  const s=diet.settings, t=computeTDEE(), delta=planGoal()-planBefore;
+  if(!delta)return'nada';
+  if(reestimate&&t.observed==null){s.lastCoach=null;return'refeita'}
+  if(!reestimate&&Math.abs(delta)>=200){startPhase(goalBefore,goalBefore+delta);return'fase'}
+  if(s.lastCoach&&s.lastCoach.goal)s.lastCoach={date:s.lastCoach.date,goal:Math.round(+s.lastCoach.goal+delta)};
+  return'ajuste';
+}
+/* o plano da meta automática fica dentro dos limites internos do app? */
+function planProblem(){
+  const s=diet.settings;
+  if(s.mode==='fixed')return'';
+  const g=planGoal(), lo=goalMin();
+  if(g<lo)return`Com esse gasto inicial e esse ritmo, a meta ficaria em ${fmt(g)} kcal — abaixo do mínimo interno do app (${fmt(lo)} kcal). Reduza o ritmo ou revise o gasto inicial.`;
+  if(g>GOAL_MAX)return`Com esses valores, a meta ficaria em ${fmt(g)} kcal — acima do máximo interno do app (${fmt(GOAL_MAX)} kcal). Revise o gasto inicial ou o ritmo.`;
+  return'';
+}
+/* configurações vindas de backup, da nuvem ou de versões antigas: só valores possíveis; o resto volta ao padrão */
+function sanitizeSettings(s){
+  const num=(v,lo,hi)=>{const n=+v;return v!=null&&v!==''&&typeof v!=='boolean'&&isFinite(n)&&n>=lo&&n<=hi?n:null};
+  if(!['deficit','maint','surplus','fixed'].includes(s.mode))s.mode='deficit';
+  s.tdee0=num(s.tdee0,800,8000)??2800;
+  s.protPerKg=num(s.protPerKg,1.2,3.5)??2.1;
+  s.fatPct=num(s.fatPct,15,45)??25;
+  if(s.ratePcts&&typeof s.ratePcts==='object')s.ratePcts={deficit:num(s.ratePcts.deficit,0.1,RATE_MAX.deficit)??0.47,surplus:num(s.ratePcts.surplus,0.1,RATE_MAX.surplus)??0.3};
+  else delete s.ratePcts;
+  if(s.rate!=null&&num(s.rate,0.05,3)==null)delete s.rate;
+  if(s.ratePct!=null&&num(s.ratePct,0.1,1)==null)delete s.ratePct;
+  if(s.fixed!=null){
+    const k=s.fixed&&num(s.fixed.kcal,800,10000), g=v=>v==null||v===''?null:num(v,0,1000);
+    s.fixed=k?{kcal:Math.round(k),prot:g(s.fixed.prot),carb:g(s.fixed.carb),fat:g(s.fixed.fat)}:null;
+  }
+  if(s.mode==='fixed'&&!s.fixed)s.mode='maint';
+  if(s.phase!=null){const p=s.phase;if(!p||!okISO(p.start)||num(p.prior,800,8000)==null)delete s.phase;else p.priorSD=num(p.priorSD,50,1000)??PRIOR_SD0}
+  if(s.lastCoach!=null&&(!s.lastCoach||!okISO(s.lastCoach.date)||num(s.lastCoach.goal,800,GOAL_MAX)==null))s.lastCoach=null;
+  if(s.profile!=null){
+    const p=s.profile;
+    if(!p||num(p.age,14,100)==null||num(p.h,120,230)==null||num(p.w,25,350)==null)delete s.profile;
+    else{if(p.bf!=null&&num(p.bf,3,60)==null)p.bf=null;if(!['m','f'].includes(p.sex))delete p.sex;if(num(p.act,1.1,2.5)==null)p.act=1.5;if(p.at&&!okISO(p.at))delete p.at;p.bfExam=!!p.bfExam}
+  }
+  if(s.progMode!=null&&!['conservador','flexivel'].includes(s.progMode))delete s.progMode;
+  if(s.lastDeload!=null&&!okISO(s.lastDeload))delete s.lastDeload;
+  if(s.incOverride!=null){if(typeof s.incOverride!=='object')delete s.incOverride;else for(const k in s.incOverride)if(num(s.incOverride[k],0.25,20)==null)delete s.incOverride[k]}
+  if(s.aiAbout!=null&&typeof s.aiAbout!=='string')delete s.aiAbout;else if(s.aiAbout)s.aiAbout=s.aiAbout.slice(0,600);
+  if(s.hevyFolder!=null&&!isFinite(+s.hevyFolder))s.hevyFolder=null;
+  if(s.maintTarget!=null&&num(s.maintTarget,25,350)==null)delete s.maintTarget;
+  if(s.checkinDay!=null&&!(Number.isInteger(+s.checkinDay)&&+s.checkinDay>=0&&+s.checkinDay<=6))delete s.checkinDay;
+  if(s.week!=null){
+    const w=s.week;
+    if(!w||!okISO(w.start)||num(w.kcal,800,GOAL_MAX*2)==null||[w.prot,w.carb,w.fat].some(v=>num(v,0,2000)==null))delete s.week;
+    else{
+      /* soma e aviso nunca vêm prontos: recalculados dos gramas; próxima data precisa existir e caber na semana */
+      w.prot=Math.round(+w.prot);w.carb=Math.round(+w.carb);w.fat=Math.round(+w.fat);w.kcal=Math.round(+w.kcal);
+      w.sum=w.prot*4+w.carb*4+w.fat*9;w.warn=macroWarn(w.kcal,w.prot,w.carb,w.fat,w.carb===0);
+      const gap=realISO(w.next)?dayNum(w.next)-dayNum(w.start):0;
+      if(gap<1||gap>7)w.next=nextCheckin(w.start);
+      if(!['deficit','maint','surplus','fixed'].includes(w.mode))w.mode=s.mode;
+      if(w.kind!=='checkin')w.kind='ajuste';
+      w.status=typeof w.status==='string'?w.status.slice(0,200):'metas da semana';
+    }
+  }
+  if(s.checkins!=null)s.checkins=Array.isArray(s.checkins)?s.checkins.filter(c=>c&&okISO(c.date)&&num(c.kcal,800,GOAL_MAX*2)!=null).slice(-26):[];
+  return s;
+}
+/* avisos dos macros (a mesma regra para a meta calculada e para metas vindas de backup) */
+function macroWarn(goal,prot,carbs,fatG,carbAuto){
+  const sum=prot*4+carbs*4+fatG*9;
+  if(carbAuto&&carbs===0&&prot*4+fatG*9>goal)return`Proteína (${prot} g) e gordura (${fatG} g) já somam ${fmt(prot*4+fatG*9)} kcal — mais que a meta de ${fmt(goal)} kcal, e o carboidrato zerou. Revise a meta ou os mínimos de proteína e gordura.`;
+  if(Math.abs(sum-goal)>Math.max(40,goal*0.03))return`Os macros somam ${fmt(sum)} kcal — ${fmt(Math.abs(sum-goal))} kcal ${sum>goal?'acima':'abaixo'} da meta de ${fmt(goal)}. Confira a prescrição.`;
+  return'';
+}
+/* backup restaurado: as metas da semana são refeitas a partir das configurações validadas e da meta preservada */
+function restoreWeek(){if(diet.settings.week)diet.settings.week.dirty='backup'}
+function computeMacros(tk){
+  /* proteína por kg de peso (tendência), gordura com um mínimo prático (% kcal, pelo menos ~0,6 g/kg), carbo
+     preenche o resto. Na meta fixa, valem os gramas prescritos; o que faltar é calculado pela mesma regra.
+     Confere se os macros fecham com a meta e avisa quando não fecham */
+  const s=diet.settings, wkg=curWeight(), fx=s.mode==='fixed'&&s.fixed?s.fixed:{};
+  const perKg=s.protPerKg||2.1, fatPct=s.fatPct||25, g=v=>Math.max(0,Math.round(+v));
+  const prot=fx.prot!=null?g(fx.prot):Math.round(perKg*wkg);
+  let fatG;
+  if(fx.fat!=null)fatG=g(fx.fat);
+  else{fatG=Math.round(tk.goal*fatPct/100/9);const minFat=Math.round(0.6*wkg);if(fatG<minFat)fatG=minFat}
+  const rest=(tk.goal-prot*4-fatG*9)/4;
+  const carbs=fx.carb!=null?g(fx.carb):Math.max(0,Math.round(rest));
+  const sum=prot*4+carbs*4+fatG*9;
+  const warn=macroWarn(tk.goal,prot,carbs,fatG,fx.carb==null&&rest<0);
+  return{kcal:tk.goal,sum,prot,fatG,carbs,wkg,pk:prot*4,fk:fatG*9,ck:carbs*4,prescribed:fx.prot!=null||fx.fat!=null||fx.carb!=null,warn};
+}
+/* gasto em repouso para a estimativa inicial: Cunningham com % de gordura de exame (DEXA, Bod Pod, pesagem
+   hidrostática); sem ele, ten Haaf 2014 (peso, altura, idade, sexo) — as duas validadas em quem treina */
+function restingKcal(p){
+  if(p.bf!=null&&p.bf>0&&p.bf<60&&p.bfExam)return{kcal:500+22*(p.w*(1-p.bf/100)),eq:'Cunningham'};
+  return{kcal:11.936*p.w+587.728*(p.h/100)-8.129*p.age+191.027*(p.sex==='f'?0:1)+29.279,eq:'ten Haaf'};
+}
+/* "0,47% ≈ 0,40 kg/sem ≈ 440 kcal/dia" + avisos de ritmo */
+function rateInfo(pct){
+  const s=diet.settings, cap=RATE_MAX[s.mode]||1, v=Math.min(cap,Math.max(0.1,pct));
+  const kg=v/100*curWeight(), kcal=kg*KCAL_PER_KG/7;
+  let t='≈ '+fmt(kg.toFixed(2))+' kg/sem · ≈ '+fmt(Math.round(kcal))+' kcal/dia de '+(s.mode==='surplus'?'superávit':'déficit');
+  if(pct>cap)t+=' · <b>limitado ao teto de '+fmt(cap)+'%/sem</b>';
+  if(s.mode==='deficit'&&kcal>500)t+=' · déficits maiores tendem a dificultar o ganho de massa magra (o efeito apareceu por volta de 500 kcal/dia)';
+  if(s.mode==='surplus'&&v<0.25)t+=' · abaixo de 0,25%/sem o ganho é bem conservador';
+  return t;
+}
+function dietCoach(t,tk,rate,nEntries){
+  const s=diet.settings, pd=phaseDay(), pct=Math.round(t.conf*100);
+  const w=curWeight(), dt=iso=>iso?iso.slice(8,10)+'/'+iso.slice(5,7):'';
+  const cov=t.span?`kcal registradas em ${t.nK} de ${t.span} dias`:'';
+  let h;
+  if(s.mode==='fixed'){
+    const exp=(tk.goal-t.tdee)*7/KCAL_PER_KG;
+    h=`Meta fixa (nutricionista): <b>${fmt(tk.goal)} kcal/dia</b>. Com o gasto estimado de ~${fmt(t.tdee)} kcal${t.observed!=null?' (seus dados pesam '+pct+'% nessa estimativa)':''}, o ritmo esperado é <b>${exp>0?'+':''}${fmt(exp.toFixed(2))} kg/sem</b> (${exp>0?'+':''}${fmt((exp/w*100).toFixed(2))}% do peso)${rate!=null?'; nas últimas 2 semanas foi '+(rate>0?'+':'')+fmt(rate.toFixed(2))+' kg/sem':''}.`;
+  }else if(t.observed!=null){
+    h=`Gasto: <b>~${fmt(t.tdee)} kcal/dia</b> (seus dados pesam ${pct}% nessa estimativa, o resto vem da estimativa anterior; incerteza estatística ±${fmt(t.sd)} kcal; média registrada ${fmt(t.avgK)} kcal, ${cov}). Meta para ${s.mode==='maint'?'manutenção'+(maintInfo().tgt!=null?' (peso-alvo '+fmt(maintInfo().tgt)+' kg, '+(maintInfo().inBand?'dentro da faixa':(maintInfo().diff>0?'acima':'abaixo')+' da faixa → leve '+(maintInfo().diff>0?'déficit':'superávit'))+')':''):(s.mode==='deficit'?'déficit':'superávit')+' de '+fmt(ratePct())+'%/sem (≈ '+fmt(rateKg().toFixed(2))+' kg/sem)'}: <b>${fmt(tk.goal)} kcal/dia</b>${tk.paused?'':tk.changed?' — ajustada no check-in de hoje':(tk.nextISO?' · próximo check-in: '+dowDate(tk.nextISO):'')}.`;
+  }else{
+    const need=t.why==='kcal'?` Para medir o gasto, o app precisa de kcal em pelo menos ${Math.round(MIN_COVER*100)}% dos dias da janela (mínimo ${MIN_KDAYS} dias)${t.span?' — agora: '+cov:''}; dia sem registro não é contado como zero, mas lacunas deixam o cálculo incerto.`:'';
+    h=`Calibrando: registre <b>peso</b> e <b>kcal</b> todos os dias.${need} Com ~1 semana de dados o gasto medido começa a entrar, e o peso dos seus dados cresce conforme eles ficam completos e consistentes (em geral 3–4 semanas). Até lá a meta parte ${s.phase&&s.phase.prior!==s.tdee0?'do gasto da fase anterior':'da estimativa inicial'} (~${fmt(t.tdee)} kcal): <b>${fmt(tk.goal)} kcal/dia</b>. Registros com peso: ${nEntries}.`;
+    if(s.mode==='maint'&&maintInfo().tgt!=null){const m=maintInfo();h+=`<br><span style="font-size:12.5px">Manutenção com peso-alvo ${fmt(m.tgt)} kg: ${m.inBand?'você está dentro da faixa de ±'+fmt(MAINT_BAND)+' kg, então a meta acompanha o gasto':'você está '+(m.diff>0?'acima':'abaixo')+' da faixa de ±'+fmt(MAINT_BAND)+' kg, então a meta tem um leve '+(m.diff>0?'déficit':'superávit')+' de ~'+fmt(m.kc)+' kcal/dia'}.</span>`}
+  }
+  if(!t.stale&&tk.recal&&!tk.fixed&&s.lastCoach&&t.observed==null&&nEntries>0)h+=`<br><span style="font-size:12.5px">A meta fica em ${fmt(tk.goal)} kcal até o gasto poder ser medido (pelo menos ${MIN_KDAYS} dias com kcal e ~1 semana de pesagens na janela atual); só então os check-ins voltam a ajustá-la.</span>`;
+  if(tk.fromStale)h+=`<br><span style="font-size:12.5px">Esta meta partiu do gasto medido até ${dt(t.endISO)}${t.endISO?'/'+t.endISO.slice(0,4):''} (dados antigos, incerteza ±${fmt(t.sd)} kcal hoje) e será recalibrada quando você voltar a registrar.</span>`;
+  if(tk.floor)h+=`<br><span class="warnline" style="font-size:12.5px">⚠️ O plano calculado (${fmt(tk.raw)} kcal) passou dos limites internos do app; a meta ficou em ${fmt(tk.goal)} kcal. Revise o ritmo ou o gasto inicial.</span>`;
+  if(t.observed!=null&&s.mode!=='fixed'&&t.avgK!=null&&Math.abs(t.avgK-tk.goal)>=200)h+=`<br><span style="font-size:12.5px">Sua média registrada (${fmt(t.avgK)} kcal) está ${fmt(Math.abs(Math.round(t.avgK-tk.goal)))} kcal ${t.avgK>tk.goal?'acima':'abaixo'} da meta. O ritmo real reflete o que você come; o app não muda a meta para compensar isso — ela continua sendo a estimativa para buscar o ritmo pedido.</span>`;
+  if(t.weekendGap)h+=`<br><span style="font-size:12.5px">📅 Suas kcal faltam sobretudo nos fins de semana. Se você come diferente nesses dias, o gasto medido fica na régua dos dias úteis: a meta ainda se corrige pelo peso enquanto esse padrão se mantiver, mas mudanças nele atrapalham o ajuste. Registrar os fins de semana resolve.</span>`;
+  if(t.stale)h=`⏸ <b>Sem dados recentes</b>: o último dia com peso e kcal registrados foi ${dt(t.endISO)} (há ${t.ageDays} dias). O gasto e o ritmo abaixo são daquela época${s.mode==='fixed'?'':', e a meta fica parada até você voltar a registrar'}.<br>`+h;
+  if(pd!=null&&pd<SETTLE_DAYS)h+=`<br><span style="font-size:12.5px">Fase nova há ${pd} dia${pd===1?'':'s'}: as pesagens dos primeiros ${SETTLE_DAYS} dias contam pouco (água e glicogênio mudam rápido) e o gasto parte do valor anterior (~${fmt(t.prior)} kcal).</span>`;
+  h+=`<br><span style="font-size:12px;color:var(--faint)">O gasto é medido na régua do seu registro: se você anota menos do que come, ele sai menor que o gasto real. Com registros e padrões consistentes, o acompanhamento do peso compensa parte desses erros — o ritmo continua sendo medido e a meta, reajustada aos poucos. A incerteza mostrada é só estatística: não inclui erro sistemático do registro nem a composição da mudança de peso (água, glicogênio, massa magra).</span>`;
+  return h;
+}
+/* cartão do check-in: o que mudou hoje (ou quando é o próximo) e o histórico das semanas */
+function checkinCard(tk,W){
+  const s=diet.settings, hist=(s.checkins||[]).slice().reverse(), today=todayISO();
+  const prev=hist.find(c=>c.date<W.start);
+  const fx=s.mode==='fixed';
+  let h='<div class="card"><h3>Check-in semanal</h3>';
+  if(W.start===today&&W.kind==='checkin'){
+    const d=(a,b,u)=>b==null?fmt(a)+u:(a===b?fmt(a)+u+' (igual)':fmt(b)+' → <b>'+fmt(a)+u+'</b>');
+    h+=`<div class="coach" style="margin-top:8px">✓ <b>Check-in de hoje</b> — meta ${esc(W.status)}.<br>`
+      +`Gasto ${W.measured?'medido':'estimado'}: ${d(W.tdee,prev&&prev.tdee,' kcal')} · Peso-tendência: ${d(W.weight,prev&&prev.weight,' kg')}<br>`
+      +`Meta: ${d(W.kcal,prev&&prev.kcal,' kcal')} · P ${W.prot} g · C ${W.carb} g · G ${W.fat} g</div>`;
+  }else{
+    h+=`<p class="note" style="margin-top:8px">${W.kind==='checkin'?'Último check-in: '+dowDate(W.start)+' — meta '+esc(W.status)+'.':'Metas '+esc(W.status)+' em '+dowDate(W.start)+'.'} Próximo: <b>${dowDate(W.next)}</b>. No check-in o app ${fx?'registra o gasto e o peso da semana (a meta segue a prescrição)':'reavalia o gasto e define as kcal e os macros da semana; a meta só muda com gasto medido e com a semana registrada (pelo menos 4 dias com kcal e 1 pesagem)'}.</p>`;
+  }
+  if(hist.length)h+=`<details style="margin-top:10px"><summary>Histórico (${hist.length} check-in${hist.length>1?'s':''})</summary><div style="margin-top:8px">`
+    +hist.map(c=>`<div class="dhist" style="grid-template-columns:52px 1fr 1fr"><span class="dd">${c.date.slice(8,10)}/${c.date.slice(5,7)}</span><span>${fmt(c.kcal)} kcal · P${c.prot} C${c.carb} G${c.fat}</span><span style="color:var(--muted)">gasto ${fmt(c.tdee)}${c.measured?'':'*'} · ${fmt(c.weight)} kg</span></div>`).join('')
+    +(hist.some(c=>!c.measured)?`<p class="note" style="font-size:11.5px;margin-top:6px">* gasto ainda estimado (sem dados suficientes para medir).</p>`:'')+'</div></details>';
+  return h+'</div>';
+}
+function restoreSettings(snap){const s=diet.settings,o=JSON.parse(snap);for(const k of Object.keys(s))delete s[k];Object.assign(s,o)}
+function showPlanWarn(msg){
+  const el=document.getElementById('planwarn');
+  if(el){el.textContent='⚠️ '+msg+' Nada foi salvo.';el.style.display='block';el.scrollIntoView({block:'center',behavior:'smooth'})}
+  toast('Combinação recusada — veja o aviso no Objetivo');
+}
+function renderDiet(){
+  const t=computeTDEE(), rate=weeklyRate(), trend=computeTrend();
+  const{tk,W,M}=weekPlan();
+  const wd=Object.keys(trend).sort();
+  const curTrend=wd.length?trend[wd[wd.length-1]]:null;
+  const first=wd.length?trend[wd[0]]:null;
+  const s=diet.settings;
+  const p=s.profile||{};
+  const today=todayISO(), te=diet.entries[today]||{};
+  const nEntries=dietDates().filter(d=>diet.entries[d].weight!=null).length;
+  const modeLabel={deficit:'Déficit',maint:'Manutenção',surplus:'Superávit',fixed:'Meta fixa'};
+  const rateOk=rate!=null&&curTrend?Math.abs(rate)/curTrend*100:null;
+  view.innerHTML=`
+  <div class="card">
+    <h3>⚖️ Peso</h3>
+    <div class="dgrid" style="margin-top:10px">
+      <div class="dfld"><label>Data</label><input type="date" id="wdate" value="${today}" max="${today}" style="font-size:14px"></div>
+      <div class="dfld"><label>Peso (kg)</label><input type="number" inputmode="decimal" step="0.05" id="dweight" placeholder="86,0" value="${te.weight??''}"></div>
+    </div>
+    <button class="btn" id="wsave" style="margin-top:12px">Salvar peso</button>
+  </div>
+  <div class="card">
+    <h3>🍽️ Alimentação</h3>
+    <div class="dgrid" style="margin-top:10px">
+      <div class="dfld"><label>Data</label><input type="date" id="fdate" value="${today}" max="${today}" style="font-size:14px"></div>
+      <div class="dfld"><label>Kcal total (MyFitnessPal)</label><input type="number" inputmode="numeric" id="dkcal" placeholder="${fmt(tk.goal)}" value="${te.kcal??''}"></div>
+    </div>
+    <div class="dgrid" style="margin-top:10px">
+      <div class="dfld"><label>Proteína (g) — opcional</label><input type="number" inputmode="numeric" id="dprot" placeholder="${M.prot}" value="${te.prot??''}"></div>
+      <div class="dfld"></div>
+    </div>
+    <label class="chkrow"><input type="checkbox" id="dinc" ${te.inc?'checked':''}> Dia incompleto (fica fora do cálculo do TDEE)</label>
+    <button class="btn" id="fsave" style="margin-top:12px">Salvar alimentação</button>
+  </div>
+  <div class="card">
+    <h3>Painel</h3>
+    <div class="statgrid">
+      <div class="stat"><div class="v">${curTrend?fmt(curTrend.toFixed(2))+' kg':'—'}</div><div class="l">Peso (tendência)</div></div>
+      <div class="stat"><div class="v ${rate!=null?(rate<0?'down':'up'):''}">${rate!=null?(rate>0?'+':'')+fmt(rate.toFixed(2))+' kg/sem':'—'}</div><div class="l">Ritmo atual</div></div>
+      <div class="stat"><div class="v acc">${fmt(t.tdee)}</div><div class="l">Gasto ${t.observed!=null?'estimado':(s.phase&&s.phase.prior!==s.tdee0?'(fase anterior)':'inicial')}</div></div>
+      <div class="stat"><div class="v">${fmt(tk.goal)}</div><div class="l">Meta da semana (${modeLabel[s.mode]})</div></div>
+      <div class="stat"><div class="v">${(curTrend&&first)?((curTrend-first>=0?'+':'')+fmt((curTrend-first).toFixed(1))+' kg'):'—'}</div><div class="l">Desde o início</div></div>
+      <div class="stat"><div class="v">${M.prot} g</div><div class="l">Proteína (${s.mode==='fixed'&&s.fixed&&s.fixed.prot!=null?'prescrita':fmt(diet.settings.protPerKg||2.1)+' g/kg'})</div></div>
+    </div>
+    <div class="coach">${dietCoach(t,tk,rate,nEntries)}</div>
+  </div>
+  <div class="card">
+    <h3>Metas da semana</h3>
+    <div class="sub" style="margin-top:2px">desde o check-in de ${dowDate(W.start)} · próximo check-in: <b>${dowDate(W.next)}</b>${tk.next>0?' (em '+tk.next+' dia'+(tk.next>1?'s':'')+')':''}</div>
+    <div class="macbar">
+      <span class="m-p" style="width:${(M.pk/Math.max(1,M.sum)*100).toFixed(1)}%"></span>
+      <span class="m-c" style="width:${(M.ck/Math.max(1,M.sum)*100).toFixed(1)}%"></span>
+      <span class="m-f" style="width:${(M.fk/Math.max(1,M.sum)*100).toFixed(1)}%"></span>
+    </div>
+    <div class="maclegend">
+      <span><i class="m-p"></i>Proteína <b>${M.prot} g</b></span>
+      <span><i class="m-c"></i>Carboidrato <b>${M.carbs} g</b></span>
+      <span><i class="m-f"></i>Gordura <b>${M.fatG} g</b></span>
+      <span>= ${fmt(M.sum)} kcal${Math.abs(M.sum-M.kcal)>5?' (meta '+fmt(M.kcal)+')':''}</span>
+    </div>
+    ${M.warn?`<p class="note warnline" style="margin-top:10px;font-size:12.5px">⚠️ ${M.warn}</p>`:''}
+    <p class="note" style="margin-top:10px;font-size:12.5px">Valem a semana toda, até o próximo check-in. Proteína pelo peso-tendência do check-in (${fmt(M.wkg.toFixed(1))} kg) · gordura com um mínimo prático (~0,6 g/kg, regra de bolso, não um limiar exato) · carboidrato preenche o resto — concentre-o antes e depois do treino. Mudar o objetivo, o ritmo ou a proteína refaz as metas na hora.</p>
+  </div>
+  ${checkinCard(tk,W)}
+  <div class="card">
+    <h3>Evolução do peso</h3>
+    <canvas id="dchart"></canvas>
+    <div class="seg">
+      <button data-r="30" class="${dietRange===30?'on':''}">30d</button>
+      <button data-r="90" class="${dietRange===90?'on':''}">90d</button>
+      <button data-r="0" class="${dietRange===0?'on':''}">Tudo</button>
+    </div>
+    <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Pontos cinza = pesagens · linha laranja = tendência suavizada (o que importa)</p>
+  </div>
+  <div class="card">
+    <h3>Objetivo</h3>
+    <div class="modegrid" style="grid-template-columns:1fr 1fr">
+      <button data-m="deficit" class="${s.mode==='deficit'?'on':''}">Déficit</button>
+      <button data-m="maint" class="${s.mode==='maint'?'on':''}">Manutenção</button>
+      <button data-m="surplus" class="${s.mode==='surplus'?'on':''}">Superávit</button>
+      <button data-m="fixed" class="${s.mode==='fixed'?'on':''}">Meta fixa</button>
+    </div>
+    ${s.mode==='fixed'?`<p class="note" style="margin:4px 0 10px;font-size:12.5px">Use a prescrição da nutricionista. O app continua medindo o seu gasto e o ritmo real, mas não mexe na meta.</p>
+    <div class="dgrid">
+      <div class="dfld"><label>Kcal/dia</label><input type="number" inputmode="numeric" id="fxk" value="${s.fixed&&s.fixed.kcal!=null?s.fixed.kcal:''}"></div>
+      <div class="dfld"><label>Proteína (g)</label><input type="number" inputmode="numeric" id="fxp" value="${s.fixed&&s.fixed.prot!=null?s.fixed.prot:''}" placeholder="auto"></div>
+      <div class="dfld"><label>Carboidrato (g)</label><input type="number" inputmode="numeric" id="fxc" value="${s.fixed&&s.fixed.carb!=null?s.fixed.carb:''}" placeholder="auto"></div>
+      <div class="dfld"><label>Gordura (g)</label><input type="number" inputmode="numeric" id="fxf" value="${s.fixed&&s.fixed.fat!=null?s.fixed.fat:''}" placeholder="auto"></div>
+    </div>
+    <p class="note" style="margin-top:8px;font-size:12px">Gramas em branco são calculados pelo app (proteína por kg e gordura em % das kcal, abaixo).</p>`:`<div class="dgrid">
+      ${s.mode==='maint'?`<div class="dfld"><label>Peso-alvo (kg)</label><input type="number" step="0.1" inputmode="decimal" id="dmaint" value="${s.maintTarget!=null?s.maintTarget:''}" placeholder="${curTrend?curTrend.toFixed(1):''}"></div>`:`<div class="dfld"><label>Ritmo (% do peso/sem)</label><input type="number" step="0.05" inputmode="decimal" id="drate" value="${ratePct()}"></div>`}
+      <div class="dfld"><label>TDEE inicial</label><input type="number" id="dtdee0" value="${s.tdee0}"></div>
+    </div>
+    <p class="note" id="rateinfo" style="margin-top:8px;font-size:12.5px">${s.mode==='maint'?maintText():rateInfo(ratePct())}</p>`}
+    <div class="dgrid" style="margin-top:10px">
+      <div class="dfld"><label>Prot. (g/kg)</label><input type="number" step="0.1" id="dpkg" value="${s.protPerKg||2.1}"></div>
+      <div class="dfld"><label>Gord. (% kcal)</label><input type="number" step="1" id="dfat" value="${s.fatPct||25}"></div>
+    </div>
+    <p class="note" style="margin-top:8px;font-size:12px">Referências: déficits maiores tendem a dificultar o ganho de massa magra — numa meta-análise, o efeito apareceu por volta de 500 kcal/dia (Murphy &amp; Koehler 2022), ~0,5%/sem no seu peso; 0,5–1%/sem é a faixa usada na preparação de fisiculturistas (Helms 2014) — para recomposição, ritmos menores preservam melhor a massa magra; ganho de 0,25–0,5%/sem para iniciantes e intermediários (Iraki 2019). Os tetos (1%/sem no déficit, 0,5%/sem no superávit) e a meta mínima de ${fmt(goalMin())} kcal são limites internos de ritmo do app — não uma validação individual. Ao trocar de objetivo, os primeiros ${SETTLE_DAYS} dias contam pouco no gasto (água e glicogênio).</p>
+    <details style="margin-top:10px">
+      <summary>Calcular TDEE inicial (perfil + atividade)</summary>
+      <div class="dgrid g3" style="margin-top:10px">
+        <div class="dfld"><label>Idade</label><input type="number" id="cAge" value="${p.age??''}" placeholder="35"></div>
+        <div class="dfld"><label>Altura (cm)</label><input type="number" id="cH" value="${p.h??''}" placeholder="186"></div>
+        <div class="dfld"><label>Peso (kg)</label><input type="number" step="0.1" id="cW" value="${p.w??(curTrend?curTrend.toFixed(1):'')}" placeholder="86"></div>
+      </div>
+      <div class="dgrid" style="margin-top:10px">
+        <div class="dfld"><label>% Gordura (opcional)</label><input type="number" step="0.5" id="cBF" value="${p.bf??''}" placeholder="21"></div>
+        <div class="dfld"><label>Sexo</label><select id="cSex" style="width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 14px inherit"><option value="m" ${p.sex!=='f'?'selected':''}>Masculino</option><option value="f" ${p.sex==='f'?'selected':''}>Feminino</option></select></div>
+      </div>
+      <div class="dfld" style="margin-top:10px"><label>Nível de atividade (trabalho + treino)</label>
+        <select id="cAct" style="width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 13px inherit">
+          <option value="1.2" ${p.act==1.2?'selected':''}>Sedentário — sem treino, trabalho sentado</option>
+          <option value="1.375" ${p.act==1.375?'selected':''}>Leve — treino 1-3x/sem</option>
+          <option value="1.5" ${(!p.act||p.act==1.5)?'selected':''}>Moderado — treino 3-5x/sem, trabalho sentado</option>
+          <option value="1.725" ${p.act==1.725?'selected':''}>Intenso — treino 6-7x/sem</option>
+          <option value="1.9" ${p.act==1.9?'selected':''}>Muito intenso — 2x/dia ou trabalho físico</option>
+        </select>
+      </div>
+      <label class="chkrow"><input type="checkbox" id="cBFx" ${p.bfExam?'checked':''}> % de gordura medido em exame (DEXA, Bod Pod ou pesagem hidrostática)</label>
+      <button class="btn ghost" id="ccalc" style="margin-top:10px">Calcular e aplicar como TDEE inicial</button>
+      <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Com % de gordura de exame usa Cunningham (500 + 22 × massa magra); sem exame, ten Haaf (peso, altura, idade e sexo; desenvolvida em atletas recreativos de 18–35 anos — fora dessa faixa, a estimativa é menos testada) — as duas validadas em quem treina. Bioimpedância e estimativa visual erram demais para a fórmula de massa magra valer a pena. A estimativa inicial só pesa até os seus dados assumirem (~3–4 semanas).</p>
+    </details>
+    <div class="dfld" style="margin-top:10px"><label>Dia do check-in semanal</label><select id="dcheck" style="width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 14px inherit">${WEEKDAYS.map((d,i)=>`<option value="${i}" ${checkinDow()===i?'selected':''}>${d}</option>`).join('')}</select></div>
+    <p class="note warnline" id="planwarn" style="display:none;margin-top:10px;font-size:12.5px"></p>
+    <button class="btn ghost" id="dsetsave" style="margin-top:10px">Salvar objetivo</button>
+  </div>
+  <div class="card">
+    <h3>Últimos registros</h3>
+    ${dietDates().slice(-14).reverse().map(d=>{const e=diet.entries[d];return `<div class="dhist"><span class="dd">${d.slice(8,10)}/${d.slice(5,7)}</span><span>${e.weight!=null&&e.weight!==''?fmt(e.weight)+' kg':'—'}${e.inc?' ⚠️':''}</span><span>${e.kcal!=null&&e.kcal!==''?fmt(e.kcal)+' kcal':'—'}</span><button class="del" data-dd="${d}">✕</button></div>`}).join('')||'<div class="empty">Nenhum registro ainda.</div>'}
+    <button class="btn ghost" id="dexp" style="margin-top:12px">⬇ Exportar dieta (CSV / Excel)</button>
+  </div>`;
+  requestAnimationFrame(drawDietChart);
+  const loadW=d=>{const e=diet.entries[d]||{};document.getElementById('dweight').value=e.weight??''};
+  const loadF=d=>{const e=diet.entries[d]||{};document.getElementById('dkcal').value=e.kcal??'';document.getElementById('dprot').value=e.prot??'';document.getElementById('dinc').checked=!!e.inc};
+  document.getElementById('wdate').onchange=ev=>loadW(ev.target.value);
+  document.getElementById('fdate').onchange=ev=>loadF(ev.target.value);
+  document.getElementById('wsave').onclick=async()=>{
+    const d=document.getElementById('wdate').value;
+    if(!okISO(d)){toast('Escolha uma data válida (até hoje)');return}
+    const w=numBR(document.getElementById('dweight').value);
+    if(w==null){toast('Preencha o peso');return}
+    if(!inRange(w,25,350)){toast('Peso fora do intervalo (25–350 kg)');return}
+    const tr0=computeTrend(), kk=Object.keys(tr0).sort();
+    if(kk.length){
+      const lt=tr0[kk[kk.length-1]];
+      if(Math.abs(w-lt)>2.5&&!confirm('Peso '+fmt(w)+' kg difere '+fmt(Math.abs(w-lt).toFixed(1))+' kg da tendência atual ('+fmt(lt.toFixed(1))+' kg). Salvar mesmo assim?'))return;
+    }
+    const e=diet.entries[d]||{weight:null,kcal:null,prot:null,inc:false};
+    e.weight=w;diet.entries[d]=e;
+    await saveDiet();await touchAndPush();
+    toast('✓ Peso salvo');renderDiet();
+  };
+  document.getElementById('fsave').onclick=async()=>{
+    const d=document.getElementById('fdate').value;
+    if(!okISO(d)){toast('Escolha uma data válida (até hoje)');return}
+    const k=numBR(document.getElementById('dkcal').value), p=numBR(document.getElementById('dprot').value), inc=document.getElementById('dinc').checked;
+    if(k==null&&p==null&&!inc){toast('Preencha as kcal');return}
+    if(k!=null&&!inRange(k,0,10000)){toast('Kcal fora do intervalo (0–10.000)');return}
+    if(p!=null&&!inRange(p,0,600)){toast('Proteína fora do intervalo (0–600 g)');return}
+    const e=diet.entries[d]||{weight:null,kcal:null,prot:null,inc:false};
+    e.kcal=k;e.prot=p;e.inc=inc;diet.entries[d]=e;
+    await saveDiet();await touchAndPush();
+    toast('✓ Alimentação salva');renderDiet();
+  };
+  view.querySelectorAll('.modegrid button[data-m]').forEach(b=>b.onclick=async()=>{
+    const nm=b.dataset.m, s=diet.settings;
+    if(nm===s.mode)return;
+    const before=targetKcal().goal, prevMode=s.mode;
+    s.mode=nm;
+    if(nm==='fixed'&&!(s.fixed&&s.fixed.kcal))s.fixed={kcal:before,prot:null,carb:null,fat:null}; /* começa na meta atual */
+    const prevTarget=s.maintTarget;
+    if(nm==='maint'&&Object.keys(computeTrend()).length)s.maintTarget=Math.round(curWeight()*10)/10; /* alvo = peso de hoje (editável) */
+    const prob=planProblem();
+    if(prob){s.mode=prevMode;s.maintTarget=prevTarget;showPlanWarn(prob);return}
+    startPhase(before,planGoal()); /* fase nova: âncora no gasto atual, primeiros dias com peso reduzido */
+    await saveDiet();await touchAndPush();renderDiet();
+    if(nm==='fixed')toast('Preencha a prescrição da nutricionista e salve');
+  });
+  const dc=document.getElementById('dcheck');
+  if(dc)dc.onchange=async()=>{
+    const s=diet.settings;s.checkinDay=+dc.value;
+    if(s.week)s.week.next=nextCheckin(s.mode!=='fixed'&&s.lastCoach&&okISO(s.lastCoach.date)?s.lastCoach.date:s.week.start);
+    await saveDiet();await touchAndPush();toast('✓ Check-in às '+WEEKDAYS[s.checkinDay]+'s');renderDiet();
+  };
+  const dr=document.getElementById('drate');
+  if(dr)dr.oninput=()=>{const v=numBR(dr.value);const ri=document.getElementById('rateinfo');if(ri&&v!=null)ri.innerHTML=rateInfo(Math.abs(v))};
+  document.getElementById('dsetsave').onclick=async()=>{
+    const s=diet.settings, val=id=>{const el=document.getElementById(id);return el?numBR(el.value):undefined};
+    const td=val('dtdee0');
+    if(td!=null&&!inRange(td,800,8000)){toast('TDEE inicial fora do intervalo (800–8.000 kcal)');return}
+    const snap=JSON.stringify(s), planBefore=planGoal(), before=targetKcal().goal, noData=computeTDEE().observed==null;
+    const tdeeChanged=td!=null&&Math.round(td)!==+s.tdee0;
+    let rateChanged=false;
+    if(s.mode==='fixed'){
+      const k=val('fxk');
+      if(k==null||!inRange(k,800,10000)){toast('Informe as kcal/dia da prescrição (800–10.000)');return}
+      const gs=['fxp','fxc','fxf'].map(val);
+      if(gs.some(v=>v!=null&&!inRange(v,0,1000))){toast('Gramas de macro inválidos (0–1.000 g)');return}
+      const g=v=>v==null?null:Math.round(v);
+      s.fixed={kcal:Math.round(k),prot:g(gs[0]),carb:g(gs[1]),fat:g(gs[2])};
+    }else if(s.mode==='maint'){
+      const mt=val('dmaint');
+      if(mt!=null){if(!inRange(mt,25,350)){toast('Peso-alvo fora do intervalo (25–350 kg)');return}s.maintTarget=Math.round(mt*10)/10}
+    }else{
+      const rv=val('drate');
+      ratePct(); /* garante a migração */
+      if(rv!=null){const nv=Math.round(Math.min(RATE_MAX[s.mode]||1,Math.max(0.1,Math.abs(rv)))*100)/100;rateChanged=nv!==s.ratePcts[s.mode];s.ratePcts[s.mode]=nv}
+    }
+    s.rate=Math.round(rateKg()*100)/100; /* kg/sem equivalente, para versões antigas do app */
+    const pk=val('dpkg'); if(pk!==undefined)s.protPerKg=Math.min(3.5,Math.max(1.2,pk!=null?pk:2.1));
+    const fp=val('dfat'); if(fp!==undefined)s.fatPct=Math.min(45,Math.max(15,fp!=null?fp:25));
+    if(td!=null)s.tdee0=Math.round(td);
+    if(tdeeChanged&&s.phase&&(s.phase.fromData===false||(s.phase.fromData==null&&noData)))s.phase.prior=s.tdee0;
+    const prob=planProblem();
+    if(prob){restoreSettings(snap);showPlanWarn(prob);return}
+    if(s.mode==='fixed'){const after=planGoal();if(Math.abs(after-before)>=200)startPhase(before,after)} /* prescrição nova = fase nova */
+    else applySettingsChange(planBefore,before,tdeeChanged&&!rateChanged); /* desloca a meta; proteína/gordura não mexem nela */
+    invalidateWeek(); /* macros da semana refeitos na hora */
+    s.protTarget=null;
+    await saveDiet();await touchAndPush();
+    toast('✓ Objetivo salvo — '+(s.mode==='fixed'?'meta fixa de '+fmt(s.fixed.kcal)+' kcal':s.mode==='maint'?'manutenção'+(s.maintTarget!=null?' (peso-alvo '+fmt(s.maintTarget)+' kg)':''):fmt(ratePct())+'%/sem (≈ '+fmt(rateKg().toFixed(2))+' kg/sem)'));
+    renderDiet();
+  };
+  view.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{dietRange=+b.dataset.r;renderDiet()});
+  const cc=document.getElementById('ccalc');
+  if(cc)cc.onclick=async()=>{
+    const age=numBR(document.getElementById('cAge').value), hcm=numBR(document.getElementById('cH').value), w=numBR(document.getElementById('cW').value);
+    const bf=numBR(document.getElementById('cBF').value), sex=document.getElementById('cSex').value, act=+document.getElementById('cAct').value;
+    if(!age||!hcm||!w){toast('Preencha idade, altura e peso');return}
+    if(!inRange(age,14,100)||!inRange(hcm,120,230)||!inRange(w,25,350)||(bf!=null&&!inRange(bf,3,60))){toast('Confira: idade 14–100, altura 120–230 cm, peso 25–350 kg, gordura 3–60%');return}
+    const bfExam=document.getElementById('cBFx').checked;
+    const prof={age,h:hcm,w,bf:bf!=null?bf:null,sex,act,bfExam,at:todayISO()};
+    const r=restingKcal(prof);
+    const tdee=Math.round(r.kcal*act);
+    const s=diet.settings, noData=computeTDEE().observed==null;
+    const snap=JSON.stringify(s), planBefore=planGoal(), before=targetKcal().goal;
+    s.tdee0=tdee;
+    s.profile=prof;
+    /* fase ancorada na estimativa por fórmula (sem dados medidos): passa a partir da estimativa nova */
+    if(s.phase&&(s.phase.fromData===false||(s.phase.fromData==null&&noData)))s.phase.prior=tdee;
+    const prob=planProblem();
+    if(prob){restoreSettings(snap);showPlanWarn(prob);return}
+    applySettingsChange(planBefore,before,true);
+    invalidateWeek();
+    await saveDiet();await touchAndPush();
+    toast('✓ TDEE inicial ('+r.eq+'): '+fmt(tdee)+' kcal/dia'+(r.eq==='ten Haaf'&&(age<18||age>35)?' · idade fora dos 18–35 anos do estudo':''));
+    renderDiet();
+  };
+  view.querySelectorAll('.dhist .del').forEach(b=>b.onclick=async()=>{
+    if(confirm('Apagar o registro de '+b.dataset.dd+'?')){delete diet.entries[b.dataset.dd];await saveDiet();await touchAndPush();renderDiet()}
+  });
+  document.getElementById('dexp').onclick=()=>{
+    let rows=['sep=;','Data;Peso (kg);Tendência (kg);Kcal;Proteína (g);Incompleto'];
+    const tr=computeTrend();
+    for(const d of dietDates()){
+      const e=diet.entries[d];
+      rows.push([d.split('-').reverse().join('/'),e.weight!=null?String(e.weight).replace('.',','):'',tr[d]!=null?tr[d].toFixed(2).replace('.',','):'',e.kcal??'',e.prot??'',e.inc?'sim':''].join(';'));
+    }
+    download('dieta.csv','\uFEFF'+rows.join('\r\n'),'text/csv;charset=utf-8');
+    toast('✓ CSV exportado');
+  };
+}
+function drawDietChart(){
+  const cv=document.getElementById('dchart');if(!cv)return;
+  const dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=220;
+  cv.width=W*dpr;cv.height=H*dpr;
+  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+  const trend=computeTrend();
+  const all=dietDates().filter(d=>diet.entries[d].weight!=null&&diet.entries[d].weight!=='');
+  ctx.font='11px ui-monospace,monospace';
+  if(all.length<2){ctx.fillStyle='#5c636c';ctx.fillText('Registre pesagens para ver o gráfico',20,110);return}
+  const endT=new Date(all[all.length-1]).getTime();
+  const fromT=dietRange===0?new Date(all[0]).getTime():endT-dietRange*86400000;
+  const ds=all.filter(d=>new Date(d).getTime()>=fromT);
+  if(ds.length<2){ctx.fillStyle='#5c636c';ctx.fillText('Poucos dados no período',20,110);return}
+  let mn=Infinity,mx=-Infinity;
+  ds.forEach(d=>{mn=Math.min(mn,+diet.entries[d].weight,trend[d]);mx=Math.max(mx,+diet.entries[d].weight,trend[d])});
+  const pad=(mx-mn)*0.15||0.5;mn-=pad;mx+=pad;
+  const X=d=>38+((new Date(d).getTime()-fromT)/(endT-fromT||1))*(W-50);
+  const Y=v=>H-22-((v-mn)/(mx-mn))*(H-40);
+  ctx.strokeStyle='#2b3138';ctx.fillStyle='#5c636c';ctx.lineWidth=1;
+  for(let i=0;i<=3;i++){
+    const v=mn+(mx-mn)*i/3, y=Y(v);
+    ctx.beginPath();ctx.moveTo(36,y);ctx.lineTo(W-8,y);ctx.stroke();
+    ctx.fillText(v.toFixed(1),2,y+4);
+  }
+  ctx.fillStyle='#6b7280';
+  ds.forEach(d=>{ctx.beginPath();ctx.arc(X(d),Y(+diet.entries[d].weight),2.6,0,7);ctx.fill()});
+  ctx.strokeStyle='#f5a623';ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.beginPath();
+  ds.forEach((d,i)=>{const x=X(d),y=Y(trend[d]);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+  ctx.stroke();
+}
+
+/* ============ Hevy: fonte do programa (rotinas) e do histórico (treinos) ============ */
+/* Cada exercício é identificado pelo código do template no Hevy (id "hevy_<template>"), o mesmo nas rotinas
+   e nos treinos registrados — o histórico se liga sozinho, sem vínculo manual. No app ficam só o RIR alvo e o incremento. */
+const HEVY_API='https://api.hevyapp.com/v1/';
+const K_HV2='ul_hevy_v2', K_HFOLD='ul_hevyfolders_v1', K_HTYPES='ul_hevytypes_v1'; /* histórico refeito uma vez com os tipos de série */
+let hevyFolders=[], hevyErr='', hevyBusy=null;
+const normName=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+const hevyExId=tid=>'hevy_'+tid;
+async function hevyGet(path){
+  const r=await fetch(HEVY_API+path,{headers:{'api-key':hevyKey}});
+  if(r.status===404)return null; /* página além da última / lista vazia */
+  if(!r.ok){
+    let d='';try{const j=await r.json();d=j&&(j.error||j.message)||''}catch(_){}
+    throw new Error('HTTP '+r.status+(r.status===401?' — chave do Hevy inválida':(d?' — '+d:'')));
+  }
+  return r.json();
+}
+async function hevyAll(path,key){
+  const out=[];
+  for(let page=1;page<=200;page++){
+    const d=await hevyGet(path+(path.includes('?')?'&':'?')+'page='+page+'&pageSize=10');
+    const list=(d&&d[key])||[];
+    out.push(...list);
+    if(!d||!list.length||(d.page_count!=null?page>=d.page_count:list.length<10))break;
+  }
+  return out;
+}
+/* treino registrado no Hevy → sessão do histórico (aquecimento fora; RIR = 10 − RPE) */
+function hevySession(w){
+  const entries=[];
+  for(const he of [...(w.exercises||[])].sort((a,b)=>(a.index??0)-(b.index??0))){
+    const sets=(he.sets||[]).filter(s=>s.type!=='warmup').map(s=>{
+      const o={w:s.weight_kg!=null?+s.weight_kg:null,r:s.reps!=null?+s.reps:null,
+        rir:s.rpe!=null?Math.max(0,10-s.rpe):null}; /* exato: RPE 8,5 → RIR 1,5 */
+      if(s.type==='dropset'||s.type==='failure')o.t=s.type; /* drop-set fica fora da decisão, como na rotina */
+      return o;
+    });
+    if(!sets.some(s=>s.r!=null))continue;
+    entries.push({exId:he.exercise_template_id?hevyExId(he.exercise_template_id):'hevy_'+normName(he.title),exName:he.title||'Exercício',sets});
+  }
+  if(!entries.length)return null;
+  return{id:'hv_'+w.id,hevyId:w.id,hevyRid:w.routine_id||null,date:w.start_time||w.created_at||new Date().toISOString(),
+    workoutId:w.routine_id?'hvr_'+w.routine_id:'hevy',workoutName:w.title||'Treino Hevy',entries};
+}
+const hevyRirDefault=repMin=>repMin>=12?[0,1]:(repMin<=6?[2,3]:[1,2]);
+/* moda das cargas das séries de trabalho da rotina (empate → maior) = carga planejada */
+function hevyPlanW(work){
+  const c={};
+  for(const s of work)if(s.weight_kg!=null&&+s.weight_kg>0)c[+s.weight_kg]=(c[+s.weight_kg]||0)+1;
+  let w=null,best=0;
+  for(const k in c)if(c[k]>best||(c[k]===best&&+k>w)){best=c[k];w=+k}
+  return w;
+}
+/* rotinas do Hevy → programa. RIR alvo = 10 − RPE das séries da rotina; carga da rotina = carga planejada.
+   Sem RPE na rotina, vale o RIR ajustado no app (ou o padrão). O incremento continua sendo ajuste do app. */
+function hevyBuildProgram(routines,old){
+  const prev={}, prevOcc={};
+  for(const wo of old)for(const ex of wo.exercises){
+    const k=ex.hevyId?hevyExId(ex.hevyId):ex.id;
+    if(!prev[k])prev[k]=ex;
+    prevOcc[wo.id+'|'+k]=ex;
+  }
+  const sel=hevyFolders.some(f=>f.id===diet.settings.hevyFolder)?diet.settings.hevyFolder:null;
+  const fIdx={};
+  for(const f of hevyFolders)fIdx[f.id]=f.index??0;
+  const list=routines.filter(rt=>sel==null||rt.folder_id===sel).map((rt,i)=>({rt,i}))
+    .sort((a,b)=>((fIdx[a.rt.folder_id]??-1)-(fIdx[b.rt.folder_id]??-1))||a.i-b.i).map(x=>x.rt);
+  return list.map(rt=>({
+    id:'hvr_'+rt.id,name:rt.title||'Treino',hevyRid:rt.id,folderId:rt.folder_id??null,created:rt.created_at||null,
+    exercises:[...(rt.exercises||[])].sort((a,b)=>(a.index??0)-(b.index??0)).filter(he=>he.exercise_template_id).map(he=>{
+      const id=hevyExId(he.exercise_template_id), o=prevOcc['hvr_'+rt.id+'|'+id]||prev[id];
+      const work=(he.sets||[]).filter(s=>s.type!=='warmup'&&s.type!=='dropset');
+      const rr=s=>[s.rep_range&&s.rep_range.start!=null?+s.rep_range.start:(s.reps!=null?+s.reps:null),
+        s.rep_range&&s.rep_range.end!=null?+s.rep_range.end:(s.reps!=null?+s.reps:null)];
+      let lo=null,hi=null;
+      for(const s of work){
+        const[a,b]=rr(s);
+        if(a!=null)lo=lo==null?a:Math.min(lo,a);
+        if(b!=null)hi=hi==null?b:Math.max(hi,b);
+      }
+      /* série a série (carga, faixa, RPE): top set + back-offs são decididos pelo grupo mais pesado */
+      const plan=work.map(s=>{const[a,b]=rr(s);return{w:s.weight_kg!=null&&+s.weight_kg>0?+s.weight_kg:null,lo:a,hi:b??a,rpe:s.rpe!=null&&s.rpe!==''&&+s.rpe>0?+s.rpe:null}});
+      const repMin=lo??o?.repMin??8, repMax=Math.max(hi??o?.repMax??12,repMin);
+      const rd=hevyRirDefault(repMin);
+      const rpes=work.map(s=>s.rpe).filter(v=>v!=null&&v!=='').map(Number).filter(v=>v>0);
+      const fromHevy=rpes.length>0;
+      return{id,hevyId:he.exercise_template_id,name:he.title||o?.name||'Exercício',sets:Math.max(1,work.length),repMin,repMax,
+        rirMin:fromHevy?Math.max(0,10-Math.max(...rpes)):(o?.rirMin??rd[0]),
+        rirMax:fromHevy?Math.max(0,10-Math.min(...rpes)):(o?.rirMax??rd[1]),
+        rirFromHevy:fromHevy,planW:hevyPlanW(work),plan,
+        inc:prev[id]?.inc??(repMin<=8?2.5:1.25),rest:he.rest_seconds??o?.rest??120};
+    })
+  }));
+}
+/* versão anterior: sessões registradas no próprio app apontavam para exercícios vinculados → passam a usar o código do Hevy */
+function hevyMigrateLegacy(old){
+  const map={};
+  for(const wo of old)for(const ex of wo.exercises)if(ex.hevyId&&ex.id!==hevyExId(ex.hevyId))map[ex.id]=hevyExId(ex.hevyId);
+  for(const s of history)if(!s.hevyId)for(const e of s.entries)if(map[e.exId])e.exId=map[e.exId];
+}
+/* full=true (ou 1ª vez nesta versão): refaz todo o histórico do Hevy; senão, só o que mudou desde a última vez
+   (treinos novos, editados ou apagados no Hevy) */
+async function hevySync(full){
+  if(!hevyKey)return{n:0};
+  if(hevyBusy)return hevyBusy;
+  hevyBusy=(async()=>{
+    const started=new Date().toISOString();
+    try{
+      const routines=await hevyAll('routines','routines');
+      try{hevyFolders=(await hevyAll('routine_folders','routine_folders')).map(f=>({id:f.id,title:f.title,index:f.index}));await sSet(K_HFOLD,hevyFolders)}catch(_){}
+      const old=program, sig0=JSON.stringify([program,history]);
+      const firstRun=!(await sGet(K_HV2)), typesDone=!!(await sGet(K_HTYPES));
+      let n=0;
+      if(full||firstRun||!hevyLast||!typesDone){
+        hevyMigrateLegacy(old);
+        const fresh=(await hevyAll('workouts','workouts')).map(hevySession).filter(Boolean);
+        const had=new Set(history.filter(h=>h.hevyId).map(h=>h.hevyId));
+        n=fresh.filter(s=>!had.has(s.hevyId)).length;
+        history=history.filter(h=>!h.hevyId).concat(fresh);
+      }else{
+        const since=new Date(new Date(hevyLast).getTime()-10*60000).toISOString(); /* margem de 10 min */
+        for(const ev of await hevyAll('workouts/events?since='+encodeURIComponent(since),'events')){
+          const wid=ev.type==='deleted'?ev.id:ev.workout&&ev.workout.id;
+          if(!wid)continue;
+          const had=history.some(h=>h.hevyId===wid);
+          history=history.filter(h=>h.hevyId!==wid);
+          if(ev.type!=='deleted'){const s=hevySession(ev.workout);if(s){history.push(s);if(!had)n++}}
+        }
+      }
+      history.sort((a,b)=>new Date(a.date)-new Date(b.date));
+      program=hevyBuildProgram(routines,old);
+      if(!program.find(w=>w.id===selWorkout))selWorkout=program[0]?.id;
+      const changed=JSON.stringify([program,history])!==sig0;
+      if(changed){await saveProgram();await saveHistory();await touchAndPush()}
+      if(firstRun)await sSet(K_HV2,1);
+      if(!typesDone)await sSet(K_HTYPES,1);
+      hevyLast=started;await sSet(K_HSYNC,hevyLast);
+      hevyErr='';
+      return{n,changed,shown:program.length,total:history.filter(h=>h.hevyId).length};
+    }catch(e){
+      hevyErr=e&&e.message?e.message:'rede/CORS';
+      return{n:0,err:hevyErr};
+    }
+  })();
+  try{return await hevyBusy}finally{hevyBusy=null}
+}
+/* faixa com a hora da última atualização e o botão ↻ (aba Progressão) */
+function hevyBar(){
+  if(!hevyKey)return '';
+  const when=hevyLast?new Date(hevyLast).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+  return `<div class="hevybar"><span>🔗 Hevy · ${hevyErr?'<b style="color:var(--hold)">falhou: '+esc(hevyErr)+'</b>':'atualizado '+when}</span><button class="mini up2" id="hvpull">↻ Atualizar</button></div>`;
+}
+function bindHevyBar(){
+  const b=document.getElementById('hvpull');
+  if(!b)return;
+  b.onclick=async()=>{
+    b.disabled=true;b.textContent='Atualizando…';
+    const r=await hevySync(false);
+    toast(r.err?'⚠️ Hevy: '+r.err:(r.n?'✓ '+r.n+' treino(s) novo(s) do Hevy':'✓ Hevy em dia'));
+    render();
+  };
+}
+
+/* ============ util ============ */
+const numBR=v=>{if(v==null||v==='')return null;const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?null:n};
+const inRange=(v,lo,hi)=>v!=null&&isFinite(v)&&v>=lo&&v<=hi;
+/* data AAAA-MM-DD que existe no calendário, entre 2000 e 2100 (pode ser futura: próximo check-in) */
+function realISO(d){
+  if(typeof d!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(d))return false;
+  const[y,m,dd]=d.split('-').map(Number), t=new Date(y,m-1,dd);
+  return t.getFullYear()===y&&t.getMonth()===m-1&&t.getDate()===dd&&y>=2000&&y<=2100;
+}
+/* data AAAA-MM-DD que existe de verdade (2026-02-31 não passa), entre 2000 e hoje */
+function okISO(d){
+  if(typeof d!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(d))return false;
+  const[y,m,dd]=d.split('-').map(Number), t=new Date(y,m-1,dd);
+  return t.getFullYear()===y&&t.getMonth()===m-1&&t.getDate()===dd&&d>='2000-01-01'&&d<=todayISO();
+}
+/* registros de dieta vindos de backup: só datas válidas e números plausíveis */
+function cleanDietEntries(src){
+  const out={};let bad=0;
+  const num=(v,lo,hi)=>{const n=typeof v==='string'?numBR(v):(v==null||v===''?null:+v);return inRange(n,lo,hi)?n:null};
+  for(const[d,e]of Object.entries(src||{})){
+    if(!okISO(d)||!e||typeof e!=='object'){bad++;continue}
+    const o={weight:num(e.weight,25,350),kcal:num(e.kcal,0,10000),prot:num(e.prot,0,600),inc:!!e.inc};
+    if((e.weight!=null&&e.weight!==''&&o.weight==null)||(e.kcal!=null&&e.kcal!==''&&o.kcal==null))bad++;
+    if(o.weight!=null||o.kcal!=null||o.prot!=null||o.inc)out[d]=o;
+  }
+  return{entries:out,bad};
+}
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._to);t._to=setTimeout(()=>t.classList.remove('show'),2600)}
+/* ============ PIN lock ============ */
+const PIN_H=2085891405; /* hash do PIN — o código não guarda o PIN em texto */
+function djb2(s){let h=5381;for(let i=0;i<s.length;i++)h=((h*33)^s.charCodeAt(i))>>>0;return h}
+let pinBuf='';
+function pinInit(){
+  let ok=false;try{ok=sessionStorage.getItem('ul_unlocked')==='1'}catch(e){}
+  const L=document.getElementById('lock');
+  if(ok){L.remove();boot();return}
+  L.querySelectorAll('.pinpad button').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.k;if(k==null)return;
+    if(k==='del')pinBuf=pinBuf.slice(0,-1);
+    else if(pinBuf.length<4)pinBuf+=k;
+    L.querySelectorAll('.pindots span').forEach((s,i)=>s.classList.toggle('f',i<pinBuf.length));
+    if(pinBuf.length===4){
+      if(djb2(pinBuf)===PIN_H){
+        try{sessionStorage.setItem('ul_unlocked','1')}catch(e){}
+        L.remove();boot();
+      }else{
+        L.classList.add('err');
+        setTimeout(()=>{L.classList.remove('err');pinBuf='';L.querySelectorAll('.pindots span').forEach(s=>s.classList.remove('f'))},350);
+      }
+    }
+  });
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
+pinInit();
+</script>
+</body>
+</html>
