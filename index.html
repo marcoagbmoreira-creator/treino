@@ -4,191 +4,241 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Progressão — Upper/Lower 3×</title>
+<meta name="theme-color" content="#F4F4F6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E0F12" media="(prefers-color-scheme: dark)">
 <style>
+/* ============ tokens — segue o modo claro/escuro do aparelho ============ */
 :root{
-  --bg:#101214; --surface:#1a1d21; --surface2:#22262b; --border:#2b3138;
-  --text:#e9ebee; --muted:#8b929b; --faint:#5c636c;
-  --up:#4ade80; --keep:#fbbf24; --hold:#f87171; --accent:#f5a623;
-  --radius:14px;
-  --mono:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
+  color-scheme:light dark;
+  --bg:#F4F4F6; --surface:#FFFFFF; --surface2:#F1F2F5; --field:#F5F6F8; --border:#E2E4E9; --line:#ECEEF1; --seg-on:#FFFFFF;
+  --text:#14161B; --muted:#5E6573; --faint:#959BA6;
+  --accent:#F26B1D; --accent-text:#C2410C; --accent-ink:#FFFFFF; --accent-soft:#FFF2E9; --accent-line:#FAD2B5;
+  --up:#15803D; --up-bg:#E7F6EC; --keep:#A16207; --keep-bg:#FDF5E1; --hold:#C62828; --hold-bg:#FDECEC; --stall:#6D28D9; --stall-bg:#F1ECFD;
+  --m-p:#22A35A; --m-c:#F59E0B; --m-f:#3B82F6;
+  --chart-grid:#ECEEF1; --chart-dot:#B9BEC7; --chart-bar:#F9CDAE;
+  --shadow:0 1px 2px rgba(20,22,27,.04),0 4px 14px rgba(20,22,27,.04);
+  --nav-bg:rgba(255,255,255,.88);
+  --radius:20px;
 }
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0E0F12; --surface:#17191E; --surface2:#20232A; --field:#1C1F25; --border:#2B2F37; --line:#23262D; --seg-on:#343841;
+  --text:#F3F4F6; --muted:#A3A9B5; --faint:#6E7480;
+  --accent:#FF8A3D; --accent-text:#FF9B57; --accent-ink:#1B0D03; --accent-soft:rgba(255,138,61,.12); --accent-line:rgba(255,138,61,.32);
+  --up:#4ADE80; --up-bg:rgba(74,222,128,.12); --keep:#FBBF24; --keep-bg:rgba(251,191,36,.12); --hold:#F87171; --hold-bg:rgba(248,113,113,.12); --stall:#A78BFA; --stall-bg:rgba(167,139,250,.13);
+  --m-p:#4ADE80; --m-c:#FBBF24; --m-f:#60A5FA;
+  --chart-grid:#262A31; --chart-dot:#4D525C; --chart-bar:rgba(255,138,61,.32);
+  --shadow:none;
+  --nav-bg:rgba(23,25,30,.88);
+}}
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
-body{background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding-bottom:90px}
-.wrap{max-width:640px;margin:0 auto;padding:0 14px}
+body{background:var(--bg);color:var(--text);font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;padding-bottom:calc(88px + env(safe-area-inset-bottom))}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+input,select,textarea{-webkit-appearance:none;appearance:none}
+input[type=checkbox]{-webkit-appearance:auto;appearance:auto}
+input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)!important;box-shadow:0 0 0 3px var(--accent-soft)}
+.wrap{max-width:640px;margin:0 auto;padding:0 16px}
 
-/* header */
-header{padding:22px 0 14px;border-bottom:1px solid var(--border);margin-bottom:16px}
-.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--accent);text-transform:uppercase}
-h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-top:2px}
-h1 small{display:block;font-size:13px;font-weight:500;color:var(--muted);letter-spacing:0;margin-top:3px}
-.barload{display:flex;gap:3px;margin-top:12px;height:6px}
-.barload span{flex:1;border-radius:2px;background:var(--surface2)}
-.barload span.on{background:var(--accent)}
+/* ============ topo + navegação ============ */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:22px 2px 16px}
+.top .date{font-size:13px;font-weight:600;color:var(--muted)}
+.top .date::first-letter{text-transform:uppercase}
+.top h1{font-size:32px;font-weight:800;letter-spacing:-.03em;line-height:1.1}
+.iconbtn{flex-shrink:0;width:42px;height:42px;border-radius:14px;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);display:grid;place-items:center;color:var(--muted)}
+.iconbtn.on{color:var(--accent-text);border-color:var(--accent-line)}
+.iconbtn svg{width:21px;height:21px}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--nav-bg);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav .navin{display:flex;max-width:640px;margin:0 auto}
+nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 2px 9px;background:none;border:none;color:var(--faint);font-size:11px;font-weight:600}
+nav button svg{width:24px;height:24px}
+nav button.active{color:var(--accent-text)}
+svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
-/* tabs */
-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(16,18,20,.96);backdrop-filter:blur(10px);border-top:1px solid var(--border);display:flex;z-index:50}
-nav button{flex:1;padding:13px 4px max(13px,env(safe-area-inset-bottom));background:none;border:none;color:var(--faint);font:600 12px/1 inherit;letter-spacing:.04em;cursor:pointer}
-nav button .ic{display:block;font-size:18px;margin-bottom:4px}
-nav button.active{color:var(--accent)}
+/* ============ base de cards e texto ============ */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:12px;box-shadow:var(--shadow)}
+.card h3{font-size:17px;font-weight:700;letter-spacing:-.01em;line-height:1.3}
+.card.hl{border-color:var(--accent-line);background:linear-gradient(180deg,var(--accent-soft),var(--surface) 70%)}
+.sub{font-size:13px;color:var(--muted);margin-top:2px}
+.note{font-size:14px;color:var(--muted);line-height:1.55}
+.note b{color:var(--text);font-weight:650}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-text)}
+.divider{height:1px;background:var(--line);margin:16px 0}
+.tag{font-size:12px;font-weight:600;background:var(--surface2);border-radius:6px;padding:2px 7px;color:var(--muted)}
+.empty{text-align:center;color:var(--faint);padding:32px 10px;font-size:15px}
+.loading{text-align:center;padding:60px 0;color:var(--faint);font-size:14px;font-weight:600}
 
-/* cards */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
-.card h3{font-size:15px;font-weight:700;letter-spacing:-.01em}
-.sub{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:2px}
-
-/* workout chips */
-.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-.chip{padding:9px 16px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-weight:700;font-size:14px;cursor:pointer}
-.chip.sel{background:var(--accent);border-color:var(--accent);color:#131313}
-
-/* suggestion badge — plate edge signature */
-.decide{display:flex;align-items:center;gap:10px;margin:10px 0 12px;padding:9px 12px;border-radius:10px;background:var(--surface2);border-left:5px solid var(--faint);font-size:13px}
-.decide b{font-family:var(--mono);font-size:13px;letter-spacing:.06em}
-.decide.up{border-left-color:var(--up)} .decide.up b{color:var(--up)}
-.decide.keep{border-left-color:var(--keep)} .decide.keep b{color:var(--keep)}
-.decide.hold{border-left-color:var(--hold)} .decide.hold b{color:var(--hold)}
-.decide.stall{border-left-color:#c084fc} .decide.stall b{color:#c084fc}
-.decide.first{border-left-color:var(--faint)} .decide.first b{color:var(--muted)}
-
-/* set rows */
-.sethead,.setrow{display:grid;grid-template-columns:30px 1fr 1fr 1fr 44px;gap:8px;align-items:center}
-.lastline{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
-.linkrow{display:flex;flex-direction:column;gap:7px;padding:11px 0;border-bottom:1px solid var(--border);font-size:13.5px}
-.linkrow:last-of-type{border:none}
-.linkrow select{width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 13px inherit}
-
-.sethead{font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;padding:0 2px}
-.setrow{margin-bottom:8px}
-.setrow .n{font-family:var(--mono);font-size:13px;color:var(--faint);text-align:center}
-.setrow input{width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 16px var(--mono);text-align:center;-moz-appearance:textfield}
-.setrow input::-webkit-outer-spin-button,.setrow input::-webkit-inner-spin-button{-webkit-appearance:none}
-.setrow input:focus{outline:none;border-color:var(--accent)}
-.setrow input.done{border-color:#3a4a3f}
-
-/* buttons */
-.btn{display:block;width:100%;padding:15px;border:none;border-radius:12px;background:var(--accent);color:#131313;font:800 16px inherit;letter-spacing:.01em;cursor:pointer;margin-top:6px}
+/* ============ botões ============ */
+.btn{display:block;width:100%;padding:14px 16px;border:none;border-radius:14px;background:var(--accent);color:var(--accent-ink);font-size:16px;font-weight:700;letter-spacing:-.005em;margin-top:8px;transition:transform .1s,opacity .15s}
 .btn:active{transform:scale(.98)}
-.btn.ghost{background:var(--surface2);color:var(--text);font-weight:600;font-size:14px;padding:12px;border:1px solid var(--border)}
-.btn.danger{background:none;border:1px solid #4a2b2b;color:var(--hold)}
+.btn.ghost{background:var(--surface2);color:var(--text);font-weight:600;font-size:15px;padding:13px}
+.btn.danger{background:none;border:1px solid var(--hold-bg);color:var(--hold);font-weight:600;font-size:15px;padding:13px}
 .btn:disabled{opacity:.45}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-
-/* program editor */
-.exedit{background:var(--surface2);border-radius:10px;padding:12px;margin-top:10px}
-.exedit input[type=text]{width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font:600 14px inherit;margin-bottom:8px}
-.grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.fld label{display:block;font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
-.fld input{width:100%;padding:9px 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font:600 14px var(--mono);text-align:center}
-.mini{background:none;border:none;color:var(--muted);font:600 13px inherit;cursor:pointer;padding:6px 8px}
+.row2 .btn{margin-top:0}
+.mini{background:none;border:none;color:var(--muted);font-size:14px;font-weight:600;padding:6px 8px}
 .mini.red{color:var(--hold)}
-.mini.up2{color:var(--accent)}
-.exhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.drag{color:var(--faint);font-size:15px}
+.mini.up2{color:var(--accent-text)}
 
-/* history */
-.hist{border-bottom:1px solid var(--border);padding:12px 2px}
-.hist:last-child{border:none}
-.hist .d{font-family:var(--mono);font-size:12px;color:var(--accent)}
-.hist .t{font-weight:700;margin:1px 0 4px}
-.hist .s{font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7}
+/* ============ controles segmentados (treinos, períodos, modos) ============ */
+.chips,.seg,.modegrid{display:flex;gap:3px;padding:3px;background:var(--surface2);border-radius:13px}
+.chips{margin-bottom:14px;overflow-x:auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip,.seg button,.modegrid button{flex:1 0 auto;padding:9px 12px;border-radius:10px;border:none;background:none;color:var(--muted);font-size:14px;font-weight:650;white-space:nowrap}
+.chip.sel,.seg button.on,.modegrid button.on{background:var(--seg-on);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.seg{margin-top:12px}
+.modegrid{margin:12px 0}
 
-/* misc */
-.note{font-size:13px;color:var(--muted);line-height:1.55}
-.note b{color:var(--text)}
-details{margin-top:10px}
-summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--accent);list-style:none}
-summary::before{content:'▸ '}
-details[open] summary::before{content:'▾ '}
-details .note{margin-top:8px}
-/* AI */
-.ai-out{background:var(--surface2);border-radius:10px;padding:14px;margin-top:12px;font-size:14px;line-height:1.65}
-.ai-out p{margin:0 0 8px}
-.ai-out h4{font-size:14px;color:var(--accent);margin:10px 0 4px}
-.ai-out ul{margin:6px 0 10px 18px}
-.ai-out li{margin-bottom:4px}
-textarea#aiq{width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:inherit;resize:vertical;min-height:60px}
-textarea#aiq:focus{outline:none;border-color:var(--accent)}
-.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--faint);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:8px}
-@keyframes sp{to{transform:rotate(360deg)}}
-/* diet */
-.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-.stat{background:var(--surface2);border-radius:10px;padding:11px 12px}
-.stat .v{font-family:var(--mono);font-size:19px;font-weight:700;letter-spacing:-.01em}
-.stat .l{font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
-.stat .v.up{color:var(--up)}.stat .v.down{color:var(--hold)}.stat .v.acc{color:var(--accent)}
-#dchart{width:100%;height:220px;display:block;margin-top:10px}
-.seg{display:flex;gap:6px;margin-top:10px}
-.seg button{flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font:700 12px inherit;cursor:pointer}
-.seg button.on{background:var(--accent);border-color:var(--accent);color:#131313}
-.modegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
-.modegrid button{padding:11px 6px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font:700 13px inherit;cursor:pointer}
-.modegrid button.on{background:var(--accent);border-color:var(--accent);color:#131313}
+/* ============ treino: carga sugerida ============ */
+.ex-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.ex-top h3{font-size:16px}
+.target{text-align:right;flex-shrink:0}
+.tw{font-size:30px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.tw small{font-size:14px;font-weight:600;color:var(--muted);margin-left:3px;letter-spacing:0}
+.badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;background:var(--surface2);color:var(--muted);white-space:nowrap}
+.target .badge{margin-top:7px}
+.badge.up{background:var(--up-bg);color:var(--up)}
+.badge.keep{background:var(--keep-bg);color:var(--keep)}
+.badge.hold{background:var(--hold-bg);color:var(--hold)}
+.badge.stall{background:var(--stall-bg);color:var(--stall)}
+.hint{font-size:14px;color:var(--muted);margin-top:12px;line-height:1.5}
+.lastline{font-size:13px;color:var(--faint);margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.lastline b{color:var(--muted);font-weight:600}
+
+/* faixa de decisão (check-in, deload) */
+.decide{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;margin:12px 0;padding:11px 14px;border-radius:14px;background:var(--surface2);font-size:14px}
+.decide b{font-weight:800;letter-spacing:.02em}
+.decide.up{background:var(--up-bg)} .decide.up b{color:var(--up)}
+.decide.keep{background:var(--keep-bg)} .decide.keep b{color:var(--keep)}
+.decide.hold{background:var(--hold-bg)} .decide.hold b{color:var(--hold)}
+.decide.stall{background:var(--stall-bg)} .decide.stall b{color:var(--stall)}
+
+/* ============ formulários ============ */
+.fld label,.dfld label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:6px}
+.fld input,.dfld input,.dsel{width:100%;padding:12px 10px;background:var(--field);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:16px;font-weight:600;text-align:center}
+.dsel{text-align:left;font-size:15px;height:48px;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23959BA6' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+.txtin{width:100%;padding:12px;background:var(--field);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:14px;font-family:ui-monospace,'SF Mono',Menlo,monospace}
+.fld input,.dfld input{height:48px}
+.dfld input[type=date]{font-size:15px}
 .dgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .dgrid.g3{grid-template-columns:1fr 1fr 1fr}
-.dfld label{display:block;font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
-.dfld input{width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 16px var(--mono);text-align:center}
-.dfld input:focus{outline:none;border-color:var(--accent)}
-.chkrow{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted)}
-.chkrow input{width:18px;height:18px;accent-color:var(--accent)}
-.dhist{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:9px 2px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12.5px}
-.dhist:last-child{border:none}
-.dhist .dd{color:var(--accent)}
-.dhist .del{color:var(--hold);background:none;border:none;font-size:15px;cursor:pointer;padding:2px 6px}
-.coach{margin-top:12px;padding:12px;border-radius:10px;background:var(--surface2);border-left:5px solid var(--accent);font-size:13.5px;line-height:1.55}
-.coach b{font-family:var(--mono)}
-/* check-in semanal */
-.ckrow{display:grid;grid-template-columns:1fr 62px 62px 58px;gap:6px;align-items:center;padding:7px 2px;border-bottom:1px solid var(--border);font:600 13px var(--mono);text-align:right}
-.ckrow .lb{text-align:left;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--muted)}
-.ckrow.ckh{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;padding-top:0}
+.grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.chkrow{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:14px;color:var(--muted)}
+.chkrow input{width:20px;height:20px;accent-color:var(--accent)}
+.exedit{background:var(--surface2);border-radius:16px;padding:14px;margin-top:10px}
+.exedit .fld input{background:var(--surface)}
+.exedit input[type=text]{width:100%;padding:11px 12px;background:var(--surface);border:1px solid var(--border);border-radius:11px;color:var(--text);font-size:15px;font-weight:600;margin-bottom:10px}
+.exhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.drag{color:var(--faint)}
+textarea#aiq{width:100%;padding:12px;background:var(--field);border:1px solid var(--border);border-radius:14px;color:var(--text);font-size:15px;resize:vertical;min-height:72px}
+details{margin-top:12px}
+summary{cursor:pointer;font-weight:650;font-size:15px;color:var(--accent-text);list-style:none;display:flex;align-items:center;gap:8px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:'';width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .15s;flex-shrink:0}
+details[open]>summary::before{transform:rotate(45deg)}
+details .note{margin-top:8px}
+.card>details.fold{margin-top:0}
+.card>details.fold>summary{color:var(--text);font-size:17px;font-weight:700;justify-content:space-between;flex-direction:row-reverse}
+.card>details.fold>summary::before{color:var(--faint)}
+
+/* ============ números ============ */
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.stat{background:var(--surface2);border-radius:16px;padding:13px 14px}
+.stat .v{font-size:22px;font-weight:750;letter-spacing:-.02em;line-height:1.2}
+.stat .l{font-size:12.5px;color:var(--muted);margin-top:3px;font-weight:500;line-height:1.35}
+.stat .v.up{color:var(--up)} .stat .v.down{color:var(--hold)} .stat .v.acc{color:var(--accent-text)}
+.streakbig{display:flex;align-items:baseline;gap:6px}
+.streakbig .n{font-size:28px;font-weight:800;letter-spacing:-.03em;line-height:1.1}
+.streakbig .u{font-size:13px;color:var(--muted);font-weight:600}
+.big{font-size:42px;font-weight:800;letter-spacing:-.035em;line-height:1.05}
+.big small{font-size:16px;font-weight:600;color:var(--muted);margin-left:5px;letter-spacing:0}
+.weekdots{display:flex;gap:6px;margin-top:12px}
+.weekdots span{flex:1;height:8px;border-radius:999px;background:var(--surface2)}
+.weekdots span.on{background:var(--accent)}
+.coach{margin-top:14px;padding:13px 14px;border-radius:14px;background:var(--surface2);font-size:14px;line-height:1.55;color:var(--muted)}
+.coach b{color:var(--text);font-weight:650}
+
+/* ============ dieta ============ */
+.macbar{display:flex;gap:3px;height:10px;margin-top:16px}
+.macbar span{height:100%;border-radius:999px}
+.m-p{background:var(--m-p)}.m-c{background:var(--m-c)}.m-f{background:var(--m-f)}
+.macgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.mac{background:var(--surface2);border-radius:14px;padding:10px 12px}
+.mac .mv{font-size:19px;font-weight:750;letter-spacing:-.02em}
+.mac .mv small{font-size:13px;font-weight:600;color:var(--muted);margin-left:1px}
+.mac .ml{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);font-weight:600}
+.mac .ml i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.logrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+#dchart{width:100%;height:220px;display:block;margin-top:12px}
+.dhist{display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:11px 2px;border-bottom:1px solid var(--line);font-size:14px}
+.dhist:last-of-type{border:none}
+.dhist .dd{color:var(--muted);font-weight:600}
+.dhist .del{color:var(--faint);background:none;border:none;font-size:15px;padding:2px 6px}
+.ckrow{display:grid;grid-template-columns:1fr 64px 64px 60px;gap:6px;align-items:center;padding:9px 2px;border-bottom:1px solid var(--line);font-size:14px;font-weight:600;text-align:right}
+.ckrow .lb{text-align:left;color:var(--muted);font-weight:500}
+.ckrow.ckh{font-size:11.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;padding-top:2px}
 .dlt.up{color:var(--up)}.dlt.dn{color:var(--hold)}.dlt.z{color:var(--faint)}
-.dsel{width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font-weight:600;font-size:14px;font-family:inherit}
-/* PIN lock */
-#lock{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px}
-#lock h2{font-size:20px;font-weight:800;letter-spacing:-.01em}
-.pindots{display:flex;gap:14px}
-.pindots span{width:14px;height:14px;border-radius:50%;border:2px solid var(--faint)}
+.facts{display:grid;gap:12px;margin-top:16px}
+.fact{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;font-size:14px}
+.fact .fl{color:var(--muted)}
+.fact .fv{text-align:right;font-weight:650}
+.fact .fv small{display:block;font-size:12.5px;font-weight:500;color:var(--faint)}
+
+/* ============ resumo ============ */
+.calhead{display:flex;justify-content:space-between;align-items:center}
+.calhead .mname{font-size:17px;font-weight:700}
+.calhead button{width:36px;height:36px;border-radius:11px;border:none;background:var(--surface2);color:var(--text);font-size:18px;line-height:1}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:12px}
+.cal .dow{font-size:11.5px;font-weight:600;color:var(--faint);text-align:center;padding:2px 0 4px}
+.cal .day{aspect-ratio:1;border-radius:11px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;position:relative;-webkit-tap-highlight-color:transparent}
+.cal .day.blank{background:none;cursor:default}
+.cal .day.t{background:var(--accent);color:var(--accent-ink)}
+.cal .day .wdot{width:5px;height:5px;border-radius:50%;background:var(--up);position:absolute;bottom:5px;left:50%;transform:translateX(-50%)}
+.cal .day.t .wdot{background:var(--accent-ink)}
+.cal .day.today{box-shadow:inset 0 0 0 2px var(--text);color:var(--text)}
+.cal .day.t.today{color:var(--accent-ink)}
+.cal .day.sel{outline:2px solid var(--accent);outline-offset:2px}
+.cal .day.future{opacity:.4;cursor:default}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12.5px;color:var(--muted)}
+.legend .sq{display:inline-block;width:11px;height:11px;border-radius:4px;background:var(--accent);vertical-align:-1px;margin-right:6px}
+.legend .dt{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--up);vertical-align:1px;margin-right:6px}
+#tonchart{width:100%;height:160px;display:block;margin-top:12px}
+.daydetail{margin-top:14px;background:var(--surface2);border-radius:14px;padding:13px 14px;font-size:14px}
+.daydetail .dtitle{font-size:13px;font-weight:700;color:var(--accent-text);margin-bottom:6px}
+.daydetail .s{font-size:13px;color:var(--muted);line-height:1.65}
+
+/* ============ dados / análise ============ */
+.hist{border-bottom:1px solid var(--line);padding:13px 2px}
+.hist:last-of-type{border:none}
+.hist .d{font-size:12.5px;font-weight:600;color:var(--accent-text)}
+.hist .t{font-weight:700;margin:1px 0 4px}
+.hist .s{font-size:13px;color:var(--muted);line-height:1.65}
+.ai-out{background:var(--surface2);border-radius:14px;padding:14px 16px;margin-top:12px;font-size:15px;line-height:1.65}
+.ai-out p{margin:0 0 8px}
+.ai-out h4{font-size:15px;color:var(--accent-text);margin:12px 0 4px}
+.ai-out ul{margin:6px 0 10px 18px}
+.ai-out li{margin-bottom:4px}
+.spin{display:inline-block;width:15px;height:15px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-3px;margin-right:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ============ PIN ============ */
+#lock{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px}
+#lock h2{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.pindots{display:flex;gap:16px}
+.pindots span{width:13px;height:13px;border-radius:50%;border:2px solid var(--faint)}
 .pindots span.f{background:var(--accent);border-color:var(--accent)}
-.pinpad{display:grid;grid-template-columns:repeat(3,72px);gap:12px}
-.pinpad button{height:64px;border-radius:16px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:700 22px var(--mono);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pinpad{display:grid;grid-template-columns:repeat(3,76px);gap:14px}
+.pinpad button{height:76px;border-radius:50%;border:none;background:var(--surface);box-shadow:var(--shadow);color:var(--text);font-size:26px;font-weight:600}
 .pinpad button:active{background:var(--surface2)}
-.pinpad button.ghostk{background:none;border:none;font-size:14px;color:var(--muted)}
+.pinpad button.ghostk{background:none;box-shadow:none;font-size:15px;color:var(--muted)}
 #lock.err .pindots{animation:shake .3s}
 @keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
-/* dashboard */
-.calhead{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
-.calhead .mname{font:700 15px inherit;text-transform:capitalize}
-.calhead button{width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;cursor:pointer}
-.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:10px}
-.cal .dow{font-family:var(--mono);font-size:10px;color:var(--faint);text-align:center;text-transform:uppercase;padding:4px 0}
-.cal .day{aspect-ratio:1;border-radius:10px;background:var(--surface2);border:1.5px solid transparent;display:flex;align-items:center;justify-content:center;font:600 13px var(--mono);color:var(--muted);cursor:pointer;position:relative;-webkit-tap-highlight-color:transparent}
-.cal .day.blank{background:none;cursor:default}
-.cal .day.t{background:#2b2310;border-color:#5c4a15;color:var(--accent)}
-.cal .day .wdot{width:5px;height:5px;border-radius:50%;background:var(--up);position:absolute;bottom:5px;left:50%;transform:translateX(-50%)}
-.cal .day.today{border-color:var(--accent)}
-.cal .day.sel{outline:2px solid var(--accent);outline-offset:1px}
-.cal .day.future{opacity:.35;cursor:default}
-.legend{display:flex;gap:16px;margin-top:10px;font-size:11.5px;color:var(--muted);font-family:var(--mono)}
-.legend .sq{display:inline-block;width:11px;height:11px;border-radius:3px;background:#2b2310;border:1.5px solid #5c4a15;vertical-align:-1px;margin-right:5px}
-.legend .dt{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--up);vertical-align:1px;margin-right:6px}
-.streakbig{display:flex;align-items:baseline;gap:8px}
-.streakbig .n{font:800 34px var(--mono);color:var(--accent)}
-.streakbig .u{font-size:12px;color:var(--muted)}
-#tonchart{width:100%;height:150px;display:block;margin-top:10px}
-.daydetail{margin-top:12px;background:var(--surface2);border-radius:10px;padding:12px;font-size:13.5px}
-.daydetail .dtitle{font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:6px}
-.daydetail .s{font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7}
-.macbar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin-top:12px;background:var(--bg)}
-.macbar span{height:100%}
-.m-p{background:#4ade80}.m-c{background:#f5a623}.m-f{background:#60a5fa}
-.maclegend{display:flex;gap:14px;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--muted);flex-wrap:wrap}
-.maclegend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px}
-.toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap}
+
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(16px);background:var(--text);color:var(--bg);padding:12px 18px;border-radius:999px;font-weight:600;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99;max-width:calc(100vw - 32px);text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.18)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.empty{text-align:center;color:var(--faint);padding:30px 10px;font-size:14px}
-.tag{font-family:var(--mono);font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted)}
-.loading{text-align:center;padding:60px 0;color:var(--faint);font-family:var(--mono);font-size:13px;letter-spacing:.1em}
-@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
@@ -204,28 +254,28 @@ textarea#aiq:focus{outline:none;border-color:var(--accent)}
   </div>
 </div>
 <div class="wrap">
-  <header>
-    <div class="eyebrow">Dupla progressão autorregulada</div>
-    <h1>Progressão de Carga <small>Upper · Lower · 3×/semana — V-taper</small></h1>
-    <div class="barload" id="weekbar"></div>
+  <header class="top">
+    <div><div class="date" id="hdate"></div><h1 id="htitle">Resumo</h1></div>
+    <button class="iconbtn" id="gear" aria-label="Ajustes e dados"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
   </header>
-  <main id="view"><div class="loading">CARREGANDO…</div></main>
+  <main id="view"><div class="loading">Carregando…</div></main>
 </div>
 
-<nav>
-  <button data-tab="home" class="active"><span class="ic">📊</span>Resumo</button>
-  <button data-tab="train"><span class="ic">📈</span>Progressão</button>
-  <button data-tab="diet"><span class="ic">⚖️</span>Dieta</button>
-  <button data-tab="program"><span class="ic">📋</span>Programa</button>
-  <button data-tab="ai"><span class="ic">🧠</span>Análise</button>
-  <button data-tab="data"><span class="ic">📤</span>Dados</button>
-</nav>
+<nav><div class="navin">
+  <button data-tab="home" class="active"><svg class="i" viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.5l8.5 7V19a1.5 1.5 0 0 1-1.5 1.5h-4v-6h-6v6H5A1.5 1.5 0 0 1 3.5 19z"/></svg>Resumo</button>
+  <button data-tab="train"><svg class="i" viewBox="0 0 24 24"><path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg>Treino</button>
+  <button data-tab="diet"><svg class="i" viewBox="0 0 24 24"><path d="M6 3v6a2 2 0 0 0 4 0V3M8 3v18M17 21V3c-2.2 1.3-3.2 4-3.2 7.2V14H17"/></svg>Dieta</button>
+  <button data-tab="program"><svg class="i" viewBox="0 0 24 24"><rect x="4.5" y="4" width="15" height="17" rx="2.5"/><path d="M9 3v2.5h6V3M8.5 11h7M8.5 15h7"/></svg>Programa</button>
+  <button data-tab="ai"><svg class="i" viewBox="0 0 24 24"><path d="M11 3.5l1.7 4.6 4.6 1.7-4.6 1.7L11 16.1l-1.7-4.6-4.6-1.7 4.6-1.7zM18 14.5l.8 2.2 2.2.8-2.2.8L18 20.5l-.8-2.2-2.2-.8 2.2-.8z"/></svg>Análise</button>
+</div></nav>
 <div class="toast" id="toast"></div>
+
 
 <script>
 /* ============ state & storage ============ */
-const K_PROG='ul_program_v1', K_HIST='ul_history_v1', K_KEY='ul_apikey_v1', K_MODEL='ul_aimodel_v1', K_GH='ul_ghtoken_v1', K_GIST='ul_gist_v1', K_UPD='ul_updated_v1', K_DIET='ul_diet_v1', K_HEVY='ul_hevykey_v1', K_HSYNC='ul_hevysync_v1';
+const K_PROG='ul_program_v1', K_HIST='ul_history_v1', K_KEY='ul_apikey_v1', K_MODEL='ul_aimodel_v1', K_GH='ul_ghtoken_v1', K_GIST='ul_gist_v1', K_UPD='ul_updated_v1', K_DIET='ul_diet_v1', K_HEVY='ul_hevykey_v1', K_HSYNC='ul_hevysync_v1', K_HV2='ul_hevyv2_v1';
 let program=[], history=[], tab='home', selWorkout=null, memOnly=false, apiKey='', aiModel='gemini-2.5-flash', ghToken='', gistId='', updatedAt=0, syncState='', hevyKey='', hevyLast='', pullOk=false;
+let dietFold={goal:false,log:false};
 let diet={entries:{},settings:{mode:'deficit',rate:0.4,protTarget:180,protPerKg:2.1,fatPct:25,tdee0:2820,checkinDow:1,checkins:[]}}, dietRange=30, homeMonth=new Date(), homeSel=null;
 
 const uid=()=>Math.random().toString(36).slice(2,9);
@@ -295,7 +345,15 @@ async function boot(){
   }
   selWorkout=program[0]?.id;
   render();
-  if(hevyKey)hevySync(false).then(r=>{if(r.n){toast('✓ '+r.n+' treino(s) importados do Hevy');render()}});
+  if(hevyKey){
+    /* a cada abertura: rotinas do Hevy → programa, treinos novos → histórico.
+       Na primeira abertura desta versão, revisita todo o histórico do Hevy uma vez para gravar o template de cada exercício. */
+    const firstV2=!(await sGet(K_HV2));
+    hevyFullSync(true,firstV2).then(async r=>{
+      if(firstV2&&!r.err)await sSet(K_HV2,1);
+      if(r.changed){toast(hevyMsg(r));if(tab!=='program')render()}
+    });
+  }
   if(memOnly)toast('⚠️ Sem armazenamento — dados só nesta sessão');
 }
 async function saveProgram(){await sSet(K_PROG,program)}
@@ -423,21 +481,19 @@ const fmt=v=>(+v).toLocaleString('pt-BR',{maximumFractionDigits:2});
 
 /* ============ render ============ */
 const view=document.getElementById('view');
+const TAB_TITLE={home:'Resumo',train:'Treino',diet:'Dieta',program:'Programa',ai:'Análise',data:'Ajustes'};
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim(); /* cores dos gráficos vêm do tema */
 function render(){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
-  weekbar();
+  document.getElementById('gear').classList.toggle('on',tab==='data');
+  document.getElementById('htitle').textContent=TAB_TITLE[tab];
+  document.getElementById('hdate').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
   if(tab==='home')renderHome();
   else if(tab==='train')renderTrain();
   else if(tab==='diet')renderDiet();
   else if(tab==='program')renderProgram();
   else if(tab==='ai')renderAI();
   else renderData();
-}
-function weekbar(){
-  const el=document.getElementById('weekbar');el.innerHTML='';
-  const now=new Date();const monday=new Date(now);monday.setDate(now.getDate()-((now.getDay()+6)%7));monday.setHours(0,0,0,0);
-  const count=history.filter(h=>new Date(h.date)>=monday).length;
-  for(let i=0;i<3;i++){const s=document.createElement('span');if(i<count)s.className='on';el.appendChild(s)}
 }
 
 /* ---- HOME / DASHBOARD ---- */
@@ -473,7 +529,7 @@ function renderHome(){
   const setsWeek=history.filter(h=>new Date(h.date)>=mon).reduce((s,h)=>s+h.entries.reduce((a,e)=>a+e.sets.filter(x=>x.r!=null).length,0),0);
   const firstDow=(new Date(y,mo,1).getDay()); /* 0=domingo */
   const dim=new Date(y,mo+1,0).getDate();
-  const mname=homeMonth.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  const mname=(m=>m[0].toUpperCase()+m.slice(1))(homeMonth.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}));
   let cal='';
   for(const dw of['D','S','T','Q','Q','S','S'])cal+=`<div class="dow">${dw}</div>`;
   for(let i=0;i<firstDow;i++)cal+='<div class="day blank"></div>';
@@ -491,46 +547,47 @@ function renderHome(){
     const dLabel=homeSel.split('-').reverse().join('/');
     let body='';
     for(const s of ss){
-      body+=`<div style="margin-bottom:6px"><b>🏋️ ${esc(s.workoutName)}</b><div class="s">${s.entries.map(e=>{const v=e.sets.filter(x=>x.r!=null);const w=Math.max(...v.map(x=>+x.w||0));return esc(e.exName.split('(')[0].trim())+' — '+fmt(w)+'kg × '+v.map(x=>x.r).join('/')}).join('<br>')}</div></div>`;
+      body+=`<div style="margin-bottom:8px"><b>${esc(s.workoutName)}</b><div class="s">${s.entries.map(e=>{const v=e.sets.filter(x=>x.r!=null);const w=Math.max(...v.map(x=>+x.w||0));return esc(e.exName.split('(')[0].trim())+' — '+fmt(w)+'kg × '+v.map(x=>x.r).join('/')}).join('<br>')}</div></div>`;
     }
     if(de&&(de.weight!=null||de.kcal!=null)){
-      body+=`<div><b>⚖️ Dieta</b><div class="s">${de.weight!=null&&de.weight!==''?'Peso: '+fmt(de.weight)+' kg':''}${de.kcal!=null&&de.kcal!==''?' · '+fmt(de.kcal)+' kcal':''}${de.prot!=null&&de.prot!==''?' · '+fmt(de.prot)+'g prot':''}${de.inc?' · ⚠️ incompleto':''}</div></div>`;
+      body+=`<div><b>Dieta</b><div class="s">${de.weight!=null&&de.weight!==''?'Peso: '+fmt(de.weight)+' kg':''}${de.kcal!=null&&de.kcal!==''?' · '+fmt(de.kcal)+' kcal':''}${de.prot!=null&&de.prot!==''?' · '+fmt(de.prot)+'g prot':''}${de.inc?' · ⚠️ incompleto':''}</div></div>`;
     }
     if(!body)body='<div class="s">Sem registros neste dia.</div>';
     detail=`<div class="daydetail"><div class="dtitle">${dLabel}</div>${body}</div>`;
   }
   const ckDue=checkinDueISO();
-  view.innerHTML=`${ckDue?`<div class="card" style="border-color:var(--accent)">
-    <h3>📅 Check-in semanal disponível</h3>
-    <p class="note" style="margin-top:4px">Revise calorias e macros da próxima semana com base no seu peso-tendência e no gasto estimado.</p>
-    <button class="btn" id="gock" style="margin-top:10px">Abrir check-in</button>
+  view.innerHTML=`${ckDue?`<div class="card hl">
+    <div class="eyebrow">Check-in semanal</div>
+    <h3 style="margin-top:4px">Hora de revisar suas metas</h3>
+    <p class="note" style="margin-top:4px">Calorias e macros da próxima semana, com base no seu peso-tendência e no gasto estimado.</p>
+    <button class="btn" id="gock" style="margin-top:14px">Abrir check-in</button>
   </div>`:''}
   <div class="card">
-    <h3>Sequências</h3>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><h3>Esta semana</h3><span class="sub">${setsWeek} séries</span></div>
+    <div class="big" style="margin-top:12px">${weekN}<small>de 3 treinos</small></div>
+    <div class="weekdots">${[0,1,2].map(i=>`<span class="${i<weekN?'on':''}"></span>`).join('')}</div>
     <div class="statgrid">
-      <div class="stat"><div class="streakbig"><span class="n">${wstreak}</span><span class="u">dias 🔥</span></div><div class="l">Pesagens seguidas</div></div>
-      <div class="stat"><div class="streakbig"><span class="n">${tstreak}</span><span class="u">semanas 💪</span></div><div class="l">Semanas com 3 treinos</div></div>
-      <div class="stat"><div class="v ${weekN>=3?'up':''}">${weekN}/3</div><div class="l">Treinos esta semana</div></div>
-      <div class="stat"><div class="v">${setsWeek}</div><div class="l">Séries na semana</div></div>
+      <div class="stat"><div class="streakbig"><span class="n">${wstreak}</span><span class="u">${wstreak===1?'dia':'dias'}</span></div><div class="l">Pesagens seguidas</div></div>
+      <div class="stat"><div class="streakbig"><span class="n">${tstreak}</span><span class="u">${tstreak===1?'semana':'semanas'}</span></div><div class="l">Com os 3 treinos</div></div>
     </div>
   </div>
   <div class="card">
     <div class="calhead">
-      <button id="calprev">‹</button>
+      <button id="calprev" aria-label="Mês anterior">‹</button>
       <span class="mname">${mname}</span>
-      <button id="calnext">›</button>
+      <button id="calnext" aria-label="Próximo mês">›</button>
     </div>
     <div class="cal">${cal}</div>
-    <div class="legend"><span><span class="sq"></span>treino</span><span><span class="dt"></span>pesagem</span><span>toque no dia para detalhes</span></div>
+    <div class="legend"><span><span class="sq"></span>treino</span><span><span class="dt"></span>pesagem</span><span>toque num dia para ver</span></div>
     ${detail}
-    <div class="statgrid" style="margin-top:12px">
+    <div class="statgrid">
       <div class="stat"><div class="v acc">${monthTrains}</div><div class="l">Treinos no mês</div></div>
-      <div class="stat"><div class="v">${monthWeighs}/${dim}</div><div class="l">Pesagens no mês</div></div>
+      <div class="stat"><div class="v">${monthWeighs}<span style="font-size:15px;color:var(--muted);font-weight:600">/${dim}</span></div><div class="l">Pesagens no mês</div></div>
     </div>
   </div>
   <div class="card">
-    <h3>Tonelagem semanal</h3>
-    <p class="note" style="margin-top:4px;font-size:12px;color:var(--faint)">Volume total levantado (carga × reps) por semana — últimas 8 semanas</p>
+    <h3>Volume semanal</h3>
+    <div class="sub">Carga × repetições, últimas 8 semanas</div>
     <canvas id="tonchart"></canvas>
   </div>`;
   const gk=document.getElementById('gock');
@@ -545,10 +602,11 @@ function renderHome(){
 }
 function drawTonnage(){
   const cv=document.getElementById('tonchart');if(!cv)return;
-  const dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=150;
+  const dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=160;
   cv.width=W*dpr;cv.height=H*dpr;
   const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
-  ctx.font='10px ui-monospace,monospace';
+  ctx.font='600 10.5px -apple-system,BlinkMacSystemFont,sans-serif';
+  const cFaint=cssv('--faint'), cMuted=cssv('--muted'), cAcc=cssv('--accent'), cBar=cssv('--chart-bar');
   const now=new Date();
   const mon=new Date(now);mon.setDate(now.getDate()-((now.getDay()+6)%7));mon.setHours(0,0,0,0);
   const weeks=[];
@@ -559,21 +617,22 @@ function drawTonnage(){
     weeks.push({label:String(ws.getDate()).padStart(2,'0')+'/'+String(ws.getMonth()+1).padStart(2,'0'),ton});
   }
   const mx=Math.max(...weeks.map(w=>w.ton),1);
-  if(mx<=1){ctx.fillStyle='#5c636c';ctx.font='13px sans-serif';ctx.fillText('Registre treinos para ver o volume',20,75);return}
-  const bw=(W-20)/8;
+  if(mx<=1){ctx.fillStyle=cFaint;ctx.font='14px -apple-system,sans-serif';ctx.fillText('Registre treinos para ver o volume',4,80);return}
+  const bw=W/8;
   weeks.forEach((w,i)=>{
     const h=(w.ton/mx)*(H-42);
-    const x=10+i*bw+bw*0.15, y=H-24-h;
-    ctx.fillStyle=i===7?'#f5a623':'#6b5316';
-    ctx.beginPath();ctx.roundRect(x,y,bw*0.7,h,4);ctx.fill();
-    ctx.fillStyle='#8b929b';
-    if(w.ton>0){const lbl=w.ton>=1000?(w.ton/1000).toFixed(1)+'t':Math.round(w.ton)+'';ctx.fillText(lbl,x+bw*0.35-ctx.measureText(lbl).width/2,y-5)}
-    ctx.fillStyle='#5c636c';
+    const x=i*bw+bw*0.15, y=H-24-h;
+    ctx.fillStyle=i===7?cAcc:cBar;
+    ctx.beginPath();ctx.roundRect(x,y,bw*0.7,Math.max(h,2),6);ctx.fill();
+    ctx.fillStyle=cMuted;
+    if(w.ton>0){const lbl=w.ton>=1000?(w.ton/1000).toFixed(1).replace('.',',')+'t':Math.round(w.ton)+'';ctx.fillText(lbl,x+bw*0.35-ctx.measureText(lbl).width/2,y-5)}
+    ctx.fillStyle=cFaint;
     ctx.fillText(w.label,x+bw*0.35-ctx.measureText(w.label).width/2,H-8);
   });
 }
 
 /* ---- TRAIN ---- */
+const BADGE={up:'Subir carga',keep:'Manter carga',hold:'Segurar',stall:'Recuar',first:'Calibrar'};
 function renderTrain(){
   if(!program.length){view.innerHTML='<div class="empty">Nenhum treino no programa. Crie um na aba Programa.</div>';return}
   if(!program.find(w=>w.id===selWorkout))selWorkout=program[0].id;
@@ -581,7 +640,9 @@ function renderTrain(){
   const dlRef=diet.settings.lastDeload||(history.length?dISO(new Date(history[0].date)):null);
   const dlWks=dlRef?Math.floor((Date.now()-new Date(dlRef).getTime())/6048e5):0;
   let bn='';
-  if(dlRef&&dlWks>=6)bn=`<div class="decide stall" style="margin-bottom:14px"><b>DELOAD SUGERIDO</b><span style="font-size:12.5px;color:var(--muted)">${dlWks} semanas sem deload — faça uma semana com metade das séries e cargas ~15% menores. <button class="mini up2" id="deloaddone" style="padding:0 4px;text-decoration:underline">marcar como feito</button></span></div>`;
+  if(dlRef&&dlWks>=6)bn=`<div class="card" style="border-color:var(--stall-bg)"><span class="badge stall">Deload sugerido</span>
+    <p class="note" style="margin-top:10px">${dlWks} semanas sem deload. Faça uma semana com metade das séries e cargas ~15% menores.</p>
+    <button class="btn ghost" id="deloaddone" style="margin-top:12px">Marcar deload como feito</button></div>`;
   let h=bn+`<div class="chips">${program.map(w=>`<button class="chip ${w.id===selWorkout?'sel':''}" data-wo="${w.id}">${esc(w.name)}</button>`).join('')}</div>`;
   h+=wo.exercises.map(ex=>{
     const sg=suggest(ex);
@@ -592,58 +653,32 @@ function renderTrain(){
       const wmax=Math.max(...v.map(s=>+s.w||0));
       const reps=v.map(s=>s.r).join('/');
       const rirs=v.filter(s=>s.rir!=null).map(s=>s.rir).join('/');
-      lastLine=`<div class="lastline">Última (${new Date(prev.date).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}): ${fmt(wmax)} kg × ${reps}${rirs?' · RIR '+rirs:''}</div>`;
+      lastLine=`<div class="lastline"><b>Última · ${new Date(prev.date).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</b> &nbsp;${fmt(wmax)} kg × ${reps}${rirs?' · RIR '+rirs:''}</div>`;
     }
+    const lastMax=prev?Math.max(...prev.sets.filter(s=>s.r!=null).map(s=>+s.w||0)):null;
+    let badge=BADGE[sg.type]||'';
+    if(sg.type==='up'&&sg.w!=null&&sg.w===lastMax)badge='Progredir'; /* sem incremento: +1 rep ou menos RIR */
+    if(sg.type==='hold'&&sg.w!=null&&lastMax!=null&&sg.w<lastMax)badge='Reduzir';
     return `<div class="card">
-      <h3>${esc(ex.name)}</h3>
-      <div class="sub">${ex.sets} × ${ex.repMin}–${ex.repMax} reps · RIR ${ex.rirMin}${ex.rirMax!==ex.rirMin?'–'+ex.rirMax:''} · +${fmt(ex.inc)} kg</div>
-      <div class="decide ${sg.type}"><b>${sg.label}${sg.w!=null?' · '+fmt(sg.w)+' kg':''}</b></div>
-      <div class="note" style="margin:-4px 0 0;font-size:12.5px">${sg.msg}</div>
+      <div class="ex-top">
+        <div style="min-width:0">
+          <h3>${esc(ex.name)}</h3>
+          <div class="sub">${ex.sets} × ${ex.repMin}${ex.repMax!==ex.repMin?'–'+ex.repMax:''} reps · RIR ${ex.rirMin}${ex.rirMax!==ex.rirMin?'–'+ex.rirMax:''}</div>
+        </div>
+        <div class="target">
+          ${sg.w!=null?`<div class="tw">${fmt(sg.w)}<small>kg</small></div>`:''}
+          <span class="badge ${sg.type}">${badge}</span>
+        </div>
+      </div>
+      <p class="hint">${sg.msg}</p>
       ${lastLine}
     </div>`;
   }).join('');
-  const un=unmatchedHevy();
-  if(un.length){
-    const opts='<option value="">— escolher —</option>'+program.map(w2=>w2.exercises.map(ex=>`<option value="${ex.id}">${esc(w2.name)}: ${esc(ex.name)}</option>`).join('')).join('');
-    h+=`<div class="card"><h3>🔗 Exercícios do Hevy sem vínculo</h3>
-      <p class="note" style="margin:8px 0 4px">Vincule cada um ao exercício correspondente do programa — o histórico passa a alimentar a progressão e importações futuras já chegam conectadas.</p>
-      ${un.map(u=>`<div class="linkrow"><span>${esc(u.name)} <span class="tag">${u.count}× no histórico</span></span><select data-link="${esc(u.exId)}">${opts}</select></div>`).join('')}
-      <button class="btn ghost" id="dolink" style="margin-top:12px">Vincular selecionados</button>
-    </div>`;
-  }
   view.innerHTML=h;
   view.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{selWorkout=c.dataset.wo;render()});
   const dl=document.getElementById('deloaddone');
   if(dl)dl.onclick=async()=>{diet.settings.lastDeload=todayISO();await saveDiet();await touchAndPush();toast('✓ Deload registrado');render()};
   view.querySelectorAll('.setrow input').forEach(i=>i.addEventListener('input',()=>i.classList.toggle('done',i.value!=='')));
-  const dlk=document.getElementById('dolink');
-  if(dlk)dlk.onclick=async()=>{
-    let n=0;
-    for(const sel of view.querySelectorAll('select[data-link]')){
-      if(sel.value){await linkHevy(sel.dataset.link,sel.value);n++}
-    }
-    if(!n){toast('Escolha ao menos um vínculo');return}
-    toast('✓ '+n+' exercício(s) vinculados');
-    render();
-  };
-}
-async function linkHevy(hevyExId,progExId){
-  let target=null;
-  for(const wo of program){const ex=wo.exercises.find(x=>x.id===progExId);if(ex){target=ex;break}}
-  if(!target)return;
-  target.hevyId=String(hevyExId).replace(/^hevy_/,'');
-  for(const s of history)for(const e of s.entries)if(e.exId===hevyExId){e.exId=target.id;e.exName=target.name}
-  await saveHistory();await saveProgram();await touchAndPush();
-}
-function unmatchedHevy(){
-  const m={};
-  for(const s of history)for(const e of s.entries){
-    if(String(e.exId).startsWith('hevy_')){
-      if(!m[e.exId])m[e.exId]={exId:e.exId,name:e.exName,count:0};
-      m[e.exId].count++;
-    }
-  }
-  return Object.values(m).sort((a,b)=>b.count-a.count);
 }
 
 /* ---- PROGRAM (editable) ---- */
@@ -657,9 +692,26 @@ function renderProgram(){
     </div>
     <p class="note" style="font-size:12.5px"><b>Conservador:</b> sobe carga só quando todas as séries de trabalho batem o topo da faixa. <b>Flexível:</b> sobe quando o total de reps fica a 1 do máximo (ex.: 10/10/9 em 3×8-10 já progride). Ambos exigem RIR dentro do alvo.</p>
   </div>`;
+  if(hevyKey){ /* programa vem do Hevy: aqui só se ajusta o que é do site (RIR alvo e incremento) */
+    h+=program.map(wo=>`<div class="card">
+    <h3 style="font-size:17px;font-weight:800">${esc(wo.name)}</h3>
+    ${wo.exercises.map(ex=>`<div class="exedit" data-exid="${ex.id}">
+      <div style="font-weight:700;font-size:14px">${esc(ex.name)}</div>
+      <div class="sub" style="margin-bottom:8px">${ex.sets} × ${ex.repMin}${ex.repMax!==ex.repMin?'–'+ex.repMax:''} reps · do Hevy</div>
+      <div class="grid6">
+        <div class="fld"><label>RIR mín</label><input type="number" value="${ex.rirMin}" data-e="rirMin"></div>
+        <div class="fld"><label>RIR máx</label><input type="number" value="${ex.rirMax}" data-e="rirMax"></div>
+        <div class="fld"><label>Incr. kg</label><input type="number" step="0.25" value="${ex.inc}" data-e="inc"></div>
+      </div>
+    </div>`).join('')}
+  </div>`).join('');
+    h+=`<button class="btn ghost" id="impRoutines">⟳ Sincronizar com o Hevy agora</button>
+      <button class="btn" id="saveprog" style="margin-top:10px">Salvar RIR e incrementos</button>
+      <p class="note" style="margin-top:12px">Treinos, exercícios, séries e faixas de reps vêm das suas <b>rotinas do Hevy</b> e são atualizados a cada abertura — para mudar o treino, edite a rotina no Hevy. Aqui ficam só o <b>RIR alvo</b> e o <b>incremento de carga</b>, que o site usa na progressão e preserva entre sincronizações. Exercícios novos entram com RIR 1-2 e incremento automático: revise-os. O mesmo exercício em dois treinos tem progressões separadas.</p>`;
+  }else{
   h+=program.map((wo,wi)=>`<div class="card">
     <div class="exhead">
-      <input type="text" value="${esc(wo.name)}" data-wname="${wo.id}" style="background:none;border:none;color:var(--text);font:800 17px inherit;width:60%">
+      <input type="text" value="${esc(wo.name)}" data-wname="${wo.id}" style="background:none;border:none;color:var(--text);font-weight:800;font-size:17px;width:60%">
       <span>
         <button class="mini up2" data-addex="${wo.id}">+ exercício</button>
         <button class="mini red" data-delwo="${wo.id}">excluir</button>
@@ -681,22 +733,22 @@ function renderProgram(){
       </div>
     </div>`).join('')}
   </div>`).join('');
-  h+=`${hevyKey?`<button class="btn ghost" id="impRoutines">⬇ Importar rotinas do Hevy</button>`:`<p class="note" style="margin:6px 0">Para importar suas rotinas direto do Hevy, configure a chave da API na aba Dados.</p>`}
+  h+=`<p class="note" style="margin:6px 0">Para trazer o programa direto das suas rotinas do Hevy, configure a chave da API em <b>Ajustes</b> (ícone no canto superior direito).</p>
       <button class="btn ghost" id="addwo" style="margin-top:10px">+ Adicionar treino</button>
-      <button class="btn" id="saveprog" style="margin-top:10px">Salvar programa</button>
-      <p class="note" style="margin-top:12px">A importação do Hevy atualiza nomes, séries, faixas de reps e a ordem — e <b>preserva</b> o RIR, o incremento e o histórico dos exercícios já vinculados, mesmo que mudem de treino (ex.: migração Upper/Lower → PPL). Exercícios novos entram com RIR 1-2 e incremento automático para você refinar.</p>`;
+      <button class="btn" id="saveprog" style="margin-top:10px">Salvar programa</button>`;
+  }
   view.innerHTML=h;
   view.querySelectorAll('[data-pm]').forEach(b=>b.onclick=async()=>{diet.settings.progMode=b.dataset.pm;await saveDiet();await touchAndPush();toast('✓ Modo '+b.dataset.pm);renderProgram()});
   const ir=document.getElementById('impRoutines');
   if(ir)ir.onclick=async()=>{
     harvest();
-    toast('Importando rotinas…');
-    const r=await hevyImportRoutines();
-    if(r.err){toast('⚠️ '+r.err);return}
-    toast(`✓ ${r.created} novo(s), ${r.updated} atualizado(s), ${r.moved} movido(s), ${r.newEx} exercício(s) novos`);
+    ir.disabled=true;toast('Sincronizando com o Hevy…');
+    const r=await hevyFullSync(false,false);
+    toast(hevyMsg(r));
     renderProgram();
   };
-  document.getElementById('addwo').onclick=()=>{program.push({id:uid(),name:'Novo treino',exercises:[]});renderProgram()};
+  const aw=document.getElementById('addwo');
+  if(aw)aw.onclick=()=>{program.push({id:uid(),name:'Novo treino',exercises:[]});renderProgram()};
   document.getElementById('saveprog').onclick=async()=>{harvest();await saveProgram();await touchAndPush();toast('✓ Programa salvo');};
   view.querySelectorAll('[data-addex]').forEach(b=>b.onclick=()=>{harvest();const wo=program.find(w=>w.id===b.dataset.addex);wo.exercises.push({id:uid(),name:'Novo exercício',sets:3,repMin:8,repMax:10,rirMin:1,rirMax:2,inc:2.5});renderProgram()});
   view.querySelectorAll('[data-delwo]').forEach(b=>b.onclick=()=>{if(confirm('Excluir este treino?')){harvest();program=program.filter(w=>w.id!==b.dataset.delwo);renderProgram()}});
@@ -726,43 +778,44 @@ function renderData(){
   const recent=[...history].reverse().slice(0,12);
   view.innerHTML=`
   <div class="card">
-    <h3>☁️ Nuvem — sincronizar entre aparelhos</h3>
+    <h3>Nuvem — sincronizar entre aparelhos</h3>
     <p class="note" style="margin:8px 0 12px">Guarda seus dados num <b>Gist secreto</b> da sua conta GitHub. Ao salvar uma sessão → envia; ao abrir a página em qualquer aparelho → baixa a versão mais recente. Configure o mesmo token no iPhone e no Mac e os dados ficam idênticos nos dois.</p>
     <details ${ghToken?'':'open'}>
       <summary>${ghToken?'Token configurado — alterar':'Configurar token do GitHub'}</summary>
       <p class="note" style="margin:8px 0 10px">Crie em <b>github.com/settings/tokens</b> → "Generate new token (classic)" → marque só o escopo <span class="tag">gist</span> → sem expiração (ou longa). Cole abaixo:</p>
-      <input type="text" id="ghtok" placeholder="ghp_..." value="${esc(ghToken||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
+      <input type="text" id="ghtok" placeholder="ghp_..." value="${esc(ghToken||'')}" class="txtin">
       <button class="btn ghost" id="ghsave" style="margin-top:10px">Salvar token e ativar</button>
     </details>
     ${ghToken?`<button class="btn ghost" id="ghsync" style="margin-top:10px">Sincronizar agora</button>`:''}
     <details style="margin-top:10px">
       <summary>Gist ID (forçar mesmo Gist em todos os aparelhos)</summary>
       <p class="note" style="margin:8px 0 10px">Se cada aparelho criou um Gist próprio, cole aqui o ID correto (o mesmo do outro aparelho) e confirme. O ID aparece no rodapé desta seção e na URL do gist em gist.github.com.</p>
-      <input type="text" id="ghgist" placeholder="ex.: a1b2c3d4e5..." value="${esc(gistId||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
+      <input type="text" id="ghgist" placeholder="ex.: a1b2c3d4e5..." value="${esc(gistId||'')}" class="txtin">
       <button class="btn ghost" id="ghgistsave" style="margin-top:10px">Usar este Gist</button>
     </details>
-    ${syncState?`<p class="note" style="margin-top:10px;font-family:var(--mono);font-size:12px">${esc(syncState)}</p>`:''}
+    ${syncState?`<p class="note" style="margin-top:10px;font-size:13px">${esc(syncState)}</p>`:''}
     ${gistId?`<p class="note" style="margin-top:6px;font-size:11px;color:var(--faint)">Gist: <span class="tag">${esc(gistId)}</span></p>`:''}
   </div>
   <div class="card">
-    <h3>🔗 Hevy — treine lá, progrida aqui</h3>
-    <p class="note" style="margin:8px 0 12px">Registre os treinos no app do <b>Hevy</b>; este app importa automaticamente e roda o algoritmo de progressão em cima (a decisão de carga aparece na aba Treinar como sempre). A cada abertura, os treinos novos são puxados sozinhos. Requer <b>Hevy Pro</b> — chave em hevy.com/settings → Developer.</p>
+    <h3>Hevy — monte e treine lá, progrida aqui</h3>
+    <p class="note" style="margin:8px 0 12px">Monte o programa nas <b>rotinas do Hevy</b> e registre os treinos lá. A cada abertura, este app puxa as rotinas (viram o programa) e os treinos novos, casa cada exercício automaticamente e roda a progressão — a carga sugerida aparece na aba Treino. Requer <b>Hevy Pro</b> — chave em hevy.com/settings → Developer.</p>
     <details ${hevyKey?'':'open'}>
       <summary>${hevyKey?'Chave configurada — alterar':'Configurar chave do Hevy'}</summary>
-      <input type="text" id="hevykey" placeholder="chave da API do Hevy" value="${esc(hevyKey||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono);margin-top:8px">
+      <input type="text" id="hevykey" placeholder="chave da API do Hevy" value="${esc(hevyKey||'')}" class="txtin" style="margin-top:8px">
       <button class="btn ghost" id="hevysave" style="margin-top:10px">Salvar chave</button>
     </details>
-    ${hevyKey?`<button class="btn ghost" id="hevyimp" style="margin-top:10px">Importar todo o histórico agora</button>
-    <button class="btn danger" id="hevyreset" style="margin-top:10px">Refazer vínculos e reimportar do zero</button>`:''}
-    ${hevyLast?`<p class="note" style="margin-top:8px;font-family:var(--mono);font-size:12px">Última importação: ${new Date(hevyLast).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>`:''}
+    ${hevyKey?`<button class="btn ghost" id="hevyimp" style="margin-top:10px">⟳ Sincronizar agora</button>
+    <button class="btn ghost" id="hevyreset" style="margin-top:10px">Revisar todo o histórico do Hevy</button>`:''}
+    ${hevyLast?`<p class="note" style="margin-top:8px;font-size:13px">Última sincronização: ${new Date(hevyLast).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>`:''}
+    ${hevyState?`<p class="note" style="margin-top:4px;font-size:13px">${esc(hevyState)}</p>`:''}
     <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Dica: registre o <b>RPE</b> nas séries do Hevy (RIR = 10 − RPE) para o algoritmo decidir com precisão. Sem RPE, ele assume que o RIR alvo foi respeitado. Séries de aquecimento são ignoradas.</p>
   </div>
   <div class="card">
     <h3>Exportar / Importar</h3>
     <p class="note" style="margin:8px 0 12px">CSV pronto para o Excel brasileiro (separador <span class="tag">;</span> e vírgula decimal). O import aceita o mesmo formato de volta e mescla por data + treino.</p>
     <div class="row2">
-      <button class="btn ghost" id="expcsv">⬇ Exportar CSV</button>
-      <button class="btn ghost" id="impcsv">⬆ Importar CSV</button>
+      <button class="btn ghost" id="expcsv">Exportar CSV</button>
+      <button class="btn ghost" id="impcsv">Importar CSV</button>
     </div>
     <div class="row2" style="margin-top:10px">
       <button class="btn ghost" id="expjson">Backup completo</button>
@@ -798,31 +851,24 @@ function renderData(){
     hevyKey=document.getElementById('hevykey').value.trim();
     await sSet(K_HEVY,hevyKey);
     if(!hevyKey){toast('Chave removida');renderData();return}
-    toast('Testando conexão…');
-    const r=await hevySync(false);
-    if(r.err)toast('⚠️ Falha: '+r.err);
-    else toast(r.n?'✓ Conectado — '+r.n+' treino(s) novos':'✓ Conectado — nada novo');
+    toast('Conectando e importando do Hevy…');
+    const r=await hevyFullSync(false,true);
+    if(!r.err)await sSet(K_HV2,1);
+    toast(hevyMsg(r));
     renderData();
   };
   const hvi=document.getElementById('hevyimp');
   if(hvi)hvi.onclick=async()=>{
-    toast('Importando histórico completo…');
-    const r=await hevySync(true);
-    if(r.err)toast('⚠️ Falha ('+r.err+') — '+r.n+' importados antes do erro');
-    else toast('✓ '+r.n+' treino(s) importados');
+    hvi.disabled=true;toast('Sincronizando com o Hevy…');
+    toast(hevyMsg(await hevyFullSync(false,false)));
     renderData();
   };
   const hvr=document.getElementById('hevyreset');
-  if(hvr)hvr.onclick=async()=>{
-    if(!confirm('Refazer vínculos: limpa TODOS os vínculos exercício↔Hevy, remove os treinos importados e reimporta tudo do zero com o casamento corrigido. Sessões registradas manualmente são preservadas. Continuar?'))return;
-    for(const wo of program)for(const ex of wo.exercises)delete ex.hevyId;
-    history=history.filter(h=>!h.hevyId);
-    await saveProgram();await saveHistory();
-    toast('Reimportando do zero…');
-    const r=await hevySync(true);
-    if(r.err)toast('⚠️ '+r.err+' — '+r.n+' reimportados');
-    else toast('✓ '+r.n+' treino(s) reimportados');
-    await touchAndPush();
+  if(hvr)hvr.onclick=async()=>{ /* revisita todas as sessões do Hevy e atualiza no lugar — não apaga nada */
+    hvr.disabled=true;toast('Revisando todo o histórico do Hevy…');
+    const r=await hevyFullSync(false,true);
+    if(!r.err)await sSet(K_HV2,1);
+    toast(r.err?hevyMsg(r):'✓ '+(r.upd+r.n)+' sessão(ões) revisadas'+(r.n?' · '+r.n+' nova(s)':''));
     renderData();
   };
   const ghs=document.getElementById('ghsave');
@@ -966,7 +1012,7 @@ function renderAI(){
     <details ${apiKey?'':'open'}>
       <summary>Chave do Gemini (Google AI Studio)</summary>
       <p class="note" style="margin:8px 0 10px">Crie uma chave gratuita em <b>aistudio.google.com</b> → "Get API key", cole aqui e salve. O free tier cobre seu volume de uso com folga, e a análise funciona em qualquer navegador, inclusive no arquivo local. A chave fica guardada só no armazenamento desta página.</p>
-      <input type="text" id="aikey" placeholder="AIza..." value="${esc(apiKey||'')}" style="width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font:13px var(--mono)">
+      <input type="text" id="aikey" placeholder="AIza..." value="${esc(apiKey||'')}" class="txtin">
       <div class="fld" style="margin-top:10px"><label>Modelo</label><input type="text" id="aimodel" value="${esc(aiModel)}" style="text-align:left;font-size:13px;padding:10px"></div>
       <div class="row2" style="margin-top:10px">
         <button class="btn ghost" id="aikeysave">Salvar</button>
@@ -1208,8 +1254,8 @@ function checkinCard(){
   if(!due){
     const nx=nextCheckin(), dows=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
     return `<div class="card">
-      <h3>📅 Check-in semanal</h3>
-      <p class="note" style="margin-top:6px">Próximo: <b>${wdLabel(nx.iso)}</b> (em ${nx.days}d). Até lá calorias e macros ficam fixos — as metas só são revisadas no check-in, como no MacroFactor.</p>
+      <h3>Check-in semanal</h3>
+      <p class="note" style="margin-top:6px">Próximo: <b>${wdLabel(nx.iso)}</b> (em ${nx.days} ${nx.days===1?'dia':'dias'}). Até lá calorias e macros ficam fixos — as metas só são revisadas no check-in, como no MacroFactor.</p>
       <div class="dfld" style="margin-top:10px"><label>Dia do check-in</label><select id="ckdow" class="dsel">${dows.map((n,i)=>`<option value="${i}" ${(s.checkinDow??1)===i?'selected':''}>${n}</option>`).join('')}</select></div>
       ${histHtml}
     </div>`;
@@ -1217,22 +1263,24 @@ function checkinCard(){
   const c=computeCheckin();
   const cls=c.step>0?'up':(c.step<0?'stall':'keep'), label=c.step>0?'AUMENTAR':(c.step<0?'REDUZIR':'MANTER');
   const row=(lb,a,b,u)=>{const d=b-a;return `<div class="ckrow"><span class="lb">${lb}</span><span>${fmt(a)}${u}</span><span>${fmt(b)}${u}</span><span class="dlt ${dcls(d)}">${d?sg(d)+u:'='}</span></div>`};
-  const why=[];
-  if(c.trendPrev!=null&&c.trendNow!=null){const dw=c.trendNow-c.trendPrev;why.push(`Tendência de peso: <b>${fmt(c.trendPrev.toFixed(1))} → ${fmt(c.trendNow.toFixed(1))} kg</b> (${sg(+dw.toFixed(2))} kg em ${c.days}d).`)}
-  if(c.rate!=null){const gap=c.rate-c.target;why.push(`Ritmo: <b>${sg(+c.rate.toFixed(2))} kg/sem</b> · alvo ${sg(c.target)} kg/sem${Math.abs(gap)<=0.1?' — dentro do alvo.':(gap<0?' — peso abaixo do ritmo-alvo.':' — peso acima do ritmo-alvo.')}`)}
-  why.push(c.t?`Gasto estimado: <b>${c.tdeePrev?fmt(c.tdeePrev)+' → ':''}${fmt(c.t.tdee)} kcal/dia</b> (confiança ${(c.t.conf*100).toFixed(0)}%).`:`Gasto ainda em calibração — a meta segue a estimativa inicial (${fmt(s.tdee0)} kcal).`);
-  if(c.avgK!=null)why.push(`Média ingerida desde o último check-in: ${fmt(c.avgK)} kcal (${c.nK} dia(s) completo(s)).`);
-  if(c.nW<3||c.nK<4)why.push(`⚠️ Poucos registros desde o último check-in (${c.nW} pesagens, ${c.nK} dias de kcal) — o gasto estimado se apoia mais nas semanas anteriores.`);
-  if(c.raw!==c.nt.goal)why.push(`Ajuste limitado a ±${CK_MAX_STEP} kcal por check-in; os ${fmt(Math.abs(c.raw-c.nt.goal))} kcal restantes entram nos próximos se a tendência se confirmar.`);
-  why.push('<span style="color:var(--faint)">O ajuste vem do gasto estimado (peso-tendência × ingestão), não de ter batido a meta.</span>');
-  return `<div class="card" style="border-color:var(--accent)">
-    <h3>📅 Check-in semanal</h3>
+  const facts=[], warn=[];
+  if(c.trendPrev!=null&&c.trendNow!=null){const dw=c.trendNow-c.trendPrev;facts.push(['Peso-tendência',`${fmt(c.trendPrev.toFixed(1))} → ${fmt(c.trendNow.toFixed(1))} kg`,`${sg(+dw.toFixed(2))} kg em ${c.days} dias`])}
+  if(c.rate!=null){const gap=c.rate-c.target;facts.push(['Ritmo',`${sg(+c.rate.toFixed(2))} kg/sem`,`alvo ${sg(c.target)}${Math.abs(gap)<=0.1?' · dentro do alvo':(gap<0?' · abaixo do ritmo-alvo':' · acima do ritmo-alvo')}`])}
+  facts.push(c.t?['Gasto estimado',`${c.tdeePrev?fmt(c.tdeePrev)+' → ':''}${fmt(c.t.tdee)} kcal`,`confiança ${(c.t.conf*100).toFixed(0)}%`]:['Gasto estimado','calibrando',`usa a estimativa inicial (${fmt(s.tdee0)} kcal)`]);
+  if(c.avgK!=null)facts.push(['Média ingerida',`${fmt(c.avgK)} kcal`,`${c.nK} ${c.nK===1?'dia completo':'dias completos'}`]);
+  if(c.nW<3||c.nK<4)warn.push(`⚠️ Poucos registros desde o último check-in (${c.nW} pesagens, ${c.nK} dias de kcal) — o gasto estimado se apoia mais nas semanas anteriores.`);
+  if(c.raw!==c.nt.goal)warn.push(`Ajuste limitado a ±${CK_MAX_STEP} kcal por check-in; os ${fmt(Math.abs(c.raw-c.nt.goal))} kcal restantes entram nos próximos se a tendência se confirmar.`);
+  warn.push('O ajuste vem do gasto estimado (peso-tendência × ingestão), não de ter batido a meta.');
+  return `<div class="card hl">
+    <div class="eyebrow">Check-in semanal</div>
+    <h3 style="margin-top:4px">Metas da próxima semana</h3>
     <div class="sub">${wdLabel(due)} · ${c.days} dias desde o último</div>
-    <div class="decide ${cls}"><b>${label}${c.step?' '+sg(c.step)+' kcal':''}</b><span style="font-size:12.5px;color:var(--muted)">metas da próxima semana</span></div>
+    <div class="decide ${cls}"><b>${label}${c.step?' '+sg(c.step)+' kcal':''}</b><span style="font-size:13px;color:var(--muted)">por dia</span></div>
     <div class="ckrow ckh"><span></span><span>Atual</span><span>Nova</span><span>Δ</span></div>
     ${row('Calorias',c.cur.goal,c.nt.goal,'')}${row('Proteína',c.cur.prot,c.nt.prot,'g')}${row('Carboidrato',c.cur.carbs,c.nt.carbs,'g')}${row('Gordura',c.cur.fatG,c.nt.fatG,'g')}
-    <p class="note" style="margin-top:10px;font-size:12.5px;line-height:1.7">${why.join('<br>')}</p>
-    <div class="row2" style="margin-top:12px"><button class="btn ghost" id="ckkeep">Manter atuais</button><button class="btn" id="ckapply">Aplicar novas metas</button></div>
+    <div class="facts">${facts.map(x=>`<div class="fact"><span class="fl">${x[0]}</span><span class="fv">${x[1]}<small>${x[2]}</small></span></div>`).join('')}</div>
+    ${warn.map(w=>`<p class="note" style="margin-top:10px;font-size:13px;color:var(--faint)">${w}</p>`).join('')}
+    <div class="row2" style="margin-top:16px"><button class="btn ghost" id="ckkeep">Manter atuais</button><button class="btn" id="ckapply">Aplicar metas</button></div>
     ${histHtml}
   </div>`;
 }
@@ -1248,71 +1296,60 @@ function renderDiet(){
   const nEntries=dietDates().filter(d=>diet.entries[d].weight!=null).length;
   const modeLabel={deficit:'Déficit',maint:'Manutenção',surplus:'Superávit'};
   const rateOk=rate!=null&&curTrend?Math.abs(rate)/curTrend*100:null;
+  const mshare=v=>(v/M.kcal*100).toFixed(1);
   view.innerHTML=`${ckPending?ckHtml:''}
   <div class="card">
-    <h3>⚖️ Peso</h3>
-    <div class="dgrid" style="margin-top:10px">
-      <div class="dfld"><label>Data</label><input type="date" id="wdate" value="${today}" max="${today}" style="font-size:14px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><h3>Meta diária</h3><span class="sub">${modeLabel[s.mode]}${s.mode!=='maint'?' · '+fmt(s.rate)+' kg/sem':''}</span></div>
+    <div class="big" style="margin-top:12px">${fmt(tk.goal)}<small>kcal</small></div>
+    <div class="macbar"><span class="m-p" style="width:${mshare(M.pk)}%"></span><span class="m-c" style="width:${mshare(M.ck)}%"></span><span class="m-f" style="width:${mshare(M.fk)}%"></span></div>
+    <div class="macgrid">
+      <div class="mac"><div class="ml"><i class="m-p"></i>Proteína</div><div class="mv">${M.prot}<small>g</small></div></div>
+      <div class="mac"><div class="ml"><i class="m-c"></i>Carbo</div><div class="mv">${M.carbs}<small>g</small></div></div>
+      <div class="mac"><div class="ml"><i class="m-f"></i>Gordura</div><div class="mv">${M.fatG}<small>g</small></div></div>
+    </div>
+    <p class="note" style="margin-top:12px;font-size:13px">${ckPending?'<b>Check-in pendente</b> — revise acima.':'Fixas até o check-in de <b>'+wdLabel(nx.iso)+'</b>.'} Proteína pelo peso-tendência (${fmt((M.wkg||0).toFixed(1))} kg), gordura como piso, carboidrato completa — concentre-o perto do treino.</p>
+  </div>
+  <div class="card">
+    <h3>Registrar</h3>
+    <div class="logrow" style="margin-top:12px">
       <div class="dfld"><label>Peso (kg)</label><input type="number" inputmode="decimal" step="0.05" id="dweight" placeholder="86,0" value="${te.weight??''}"></div>
+      <div class="dfld"><label>Data</label><input type="date" id="wdate" value="${today}" max="${today}"></div>
     </div>
     <button class="btn" id="wsave" style="margin-top:12px">Salvar peso</button>
-  </div>
-  <div class="card">
-    <h3>🍽️ Alimentação</h3>
-    <div class="dgrid" style="margin-top:10px">
-      <div class="dfld"><label>Data</label><input type="date" id="fdate" value="${today}" max="${today}" style="font-size:14px"></div>
-      <div class="dfld"><label>Kcal total (MyFitnessPal)</label><input type="number" inputmode="numeric" id="dkcal" placeholder="${fmt(tk.goal)}" value="${te.kcal??''}"></div>
+    <div class="divider"></div>
+    <div class="logrow">
+      <div class="dfld"><label>Kcal do dia</label><input type="number" inputmode="numeric" id="dkcal" placeholder="${fmt(tk.goal)}" value="${te.kcal??''}"></div>
+      <div class="dfld"><label>Proteína (g)</label><input type="number" inputmode="numeric" id="dprot" placeholder="opcional" value="${te.prot??''}"></div>
     </div>
-    <div class="dgrid" style="margin-top:10px">
-      <div class="dfld"><label>Proteína (g) — opcional</label><input type="number" inputmode="numeric" id="dprot" placeholder="${M.prot}" value="${te.prot??''}"></div>
-      <div class="dfld"></div>
+    <div class="logrow" style="margin-top:10px">
+      <div class="dfld"><label>Data</label><input type="date" id="fdate" value="${today}" max="${today}"></div>
+      <label class="chkrow" style="margin:0 0 13px"><input type="checkbox" id="dinc" ${te.inc?'checked':''}> Dia incompleto</label>
     </div>
-    <label class="chkrow"><input type="checkbox" id="dinc" ${te.inc?'checked':''}> Dia incompleto (fica fora do cálculo do TDEE)</label>
     <button class="btn" id="fsave" style="margin-top:12px">Salvar alimentação</button>
+    <p class="note" style="margin-top:10px;font-size:12.5px;color:var(--faint)">Dia incompleto fica fora do cálculo do gasto.</p>
   </div>
   <div class="card">
-    <h3>Painel</h3>
+    <h3>Peso e gasto</h3>
     <div class="statgrid">
-      <div class="stat"><div class="v">${curTrend?fmt(curTrend.toFixed(2))+' kg':'—'}</div><div class="l">Peso (tendência)</div></div>
-      <div class="stat"><div class="v ${rate!=null?(rate<0?'down':'up'):''}">${rate!=null?(rate>0?'+':'')+fmt(rate.toFixed(2))+' kg/sem':'—'}</div><div class="l">Ritmo atual</div></div>
-      <div class="stat"><div class="v acc">${t?fmt(t.tdee):'—'}</div><div class="l">TDEE observado</div></div>
-      <div class="stat"><div class="v">${fmt(tk.goal)}</div><div class="l">Meta kcal (${modeLabel[s.mode]})</div></div>
-      <div class="stat"><div class="v">${(curTrend&&first)?((curTrend-first>=0?'+':'')+fmt((curTrend-first).toFixed(1))+' kg'):'—'}</div><div class="l">Desde o início</div></div>
-      <div class="stat"><div class="v">${M.prot} g</div><div class="l">Proteína (${fmt(M.wkg>0?(diet.settings.protPerKg||2.1):0)} g/kg)</div></div>
+      <div class="stat"><div class="v">${curTrend?fmt(curTrend.toFixed(1))+'<span style="font-size:14px;color:var(--muted);font-weight:600"> kg</span>':'—'}</div><div class="l">Peso-tendência</div></div>
+      <div class="stat"><div class="v">${rate!=null?(rate>0?'+':'')+fmt(rate.toFixed(2)):'—'}<span style="font-size:14px;color:var(--muted);font-weight:600">${rate!=null?' kg/sem':''}</span></div><div class="l">Ritmo atual</div></div>
+      <div class="stat"><div class="v acc">${t?fmt(t.tdee):'—'}</div><div class="l">Gasto estimado (kcal)</div></div>
+      <div class="stat"><div class="v">${(curTrend&&first)?((curTrend-first>=0?'+':'')+fmt((curTrend-first).toFixed(1))):'—'}<span style="font-size:14px;color:var(--muted);font-weight:600">${curTrend&&first?' kg':''}</span></div><div class="l">Desde o início</div></div>
     </div>
-    <div class="coach">${
-      t?`TDEE: <b>~${fmt(t.tdee)} kcal/dia</b> (confiança ${(t.conf*100).toFixed(0)}%${t.conf<1?' — converge com mais registros':''}; média ingerida ${fmt(t.avgK)} kcal em ${t.nK} dias completos, janela ${t.days}d). Meta para ${modeLabel[s.mode].toLowerCase()}${s.mode!=='maint'?' de '+fmt(s.rate)+' kg/sem':''}: <b>${fmt(tk.goal)} kcal/dia</b>. ${ckPending?'<b>Check-in semanal pendente</b> — revise no topo da página.':'Próximo check-in: <b>'+wdLabel(nx.iso)+'</b> (em '+nx.days+'d).'}${rateOk!=null&&rateOk>0.75&&s.mode==='deficit'?' ⚠️ Ritmo acima de 0,75%/sem do peso — risco de perda de massa; reduza o déficit.':''}`
-      :`Calibrando: registre <b>peso diário</b> e <b>kcal</b>. O TDEE aparece com ~4 pesagens em 7+ dias e 4 dias completos de kcal, e ganha confiança até ~2-3 semanas. Meta atual (estimativa inicial de ${fmt(s.tdee0)} kcal): <b>${fmt(tk.goal)} kcal/dia</b>. Registros com peso: ${nEntries}.`
-    }</div>
-  </div>
-  <div class="card">
-    <h3>Metas de macros — semana</h3>
-    <div class="macbar">
-      <span class="m-p" style="width:${(M.pk/M.kcal*100).toFixed(1)}%"></span>
-      <span class="m-c" style="width:${(M.ck/M.kcal*100).toFixed(1)}%"></span>
-      <span class="m-f" style="width:${(M.fk/M.kcal*100).toFixed(1)}%"></span>
-    </div>
-    <div class="maclegend">
-      <span><i class="m-p"></i>Proteína <b>${M.prot} g</b></span>
-      <span><i class="m-c"></i>Carboidrato <b>${M.carbs} g</b></span>
-      <span><i class="m-f"></i>Gordura <b>${M.fatG} g</b></span>
-      <span>= ${fmt(M.kcal)} kcal</span>
-    </div>
-    <p class="note" style="margin-top:10px;font-size:12.5px">Proteína ancorada no seu peso-tendência (${fmt((M.wkg||0).toFixed(1))} kg) · gordura como piso hormonal · carboidrato preenche o resto — concentre-o antes e depois do treino. Os números ficam fixos até o próximo check-in semanal (ou até você mudar o objetivo).</p>
-  </div>
-  ${ckPending?'':ckHtml}
-  <div class="card">
-    <h3>Evolução do peso</h3>
     <canvas id="dchart"></canvas>
     <div class="seg">
-      <button data-r="30" class="${dietRange===30?'on':''}">30d</button>
-      <button data-r="90" class="${dietRange===90?'on':''}">90d</button>
+      <button data-r="30" class="${dietRange===30?'on':''}">30 dias</button>
+      <button data-r="90" class="${dietRange===90?'on':''}">90 dias</button>
       <button data-r="0" class="${dietRange===0?'on':''}">Tudo</button>
     </div>
-    <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Pontos cinza = pesagens · linha laranja = tendência suavizada (o que importa)</p>
+    <div class="legend"><span><span class="dt" style="background:var(--chart-dot)"></span>pesagens</span><span><span class="sq" style="height:3px;width:14px;border-radius:2px;vertical-align:3px"></span>tendência (o que importa)</span></div>
+    <div class="coach">${
+      t?`Gasto estimado <b>~${fmt(t.tdee)} kcal/dia</b> — confiança ${(t.conf*100).toFixed(0)}%${t.conf<1?', converge com mais registros':''}. Média ingerida ${fmt(t.avgK)} kcal em ${t.nK} dias completos (janela de ${t.days} dias).${rateOk!=null&&rateOk>0.75&&s.mode==='deficit'?' <b>⚠️ Ritmo acima de 0,75% do peso por semana</b> — risco de perder massa; reduza o déficit.':''}`
+      :`Calibrando: registre <b>peso diário</b> e <b>kcal</b>. O gasto aparece com ~4 pesagens em 7+ dias e 4 dias completos de kcal, e ganha confiança em 2–3 semanas. Até lá a meta usa a estimativa inicial (${fmt(s.tdee0)} kcal). Registros com peso: ${nEntries}.`
+    }</div>
   </div>
-  <div class="card">
-    <h3>Objetivo</h3>
+  ${ckPending?'':ckHtml}
+  <div class="card"><details class="fold" id="fgoal" ${dietFold.goal?'open':''}><summary>Objetivo e metas</summary>
     <div class="modegrid">
       <button data-m="deficit" class="${s.mode==='deficit'?'on':''}">Déficit</button>
       <button data-m="maint" class="${s.mode==='maint'?'on':''}">Manutenção</button>
@@ -1327,20 +1364,20 @@ function renderDiet(){
       <div class="dfld"><label>TDEE inicial</label><input type="number" id="dtdee0" value="${s.tdee0}"></div>
       <div class="dfld"></div>
     </div>
-    <p class="note" style="margin-top:8px;font-size:12px">Referências: recomposição = déficit 0,25-0,5 kg/sem · superávit magro = 0,1-0,25 kg/sem. O TDEE inicial só vale até o algoritmo convergir (~2-3 semanas).</p>
-    <details style="margin-top:10px">
+    <p class="note" style="margin-top:10px;font-size:13px">Recomposição: déficit de 0,25–0,5 kg/sem. Superávit magro: 0,1–0,25 kg/sem. O TDEE inicial só vale até o algoritmo convergir (~2–3 semanas).</p>
+    <details>
       <summary>Calcular TDEE inicial (perfil + atividade)</summary>
-      <div class="dgrid g3" style="margin-top:10px">
+      <div class="dgrid g3" style="margin-top:12px">
         <div class="dfld"><label>Idade</label><input type="number" id="cAge" value="${p.age??''}" placeholder="35"></div>
         <div class="dfld"><label>Altura (cm)</label><input type="number" id="cH" value="${p.h??''}" placeholder="186"></div>
         <div class="dfld"><label>Peso (kg)</label><input type="number" step="0.1" id="cW" value="${p.w??(curTrend?curTrend.toFixed(1):'')}" placeholder="86"></div>
       </div>
       <div class="dgrid" style="margin-top:10px">
         <div class="dfld"><label>% Gordura (opcional)</label><input type="number" step="0.5" id="cBF" value="${p.bf??''}" placeholder="21"></div>
-        <div class="dfld"><label>Sexo</label><select id="cSex" style="width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 14px inherit"><option value="m" ${p.sex!=='f'?'selected':''}>Masculino</option><option value="f" ${p.sex==='f'?'selected':''}>Feminino</option></select></div>
+        <div class="dfld"><label>Sexo</label><select id="cSex" class="dsel"><option value="m" ${p.sex!=='f'?'selected':''}>Masculino</option><option value="f" ${p.sex==='f'?'selected':''}>Feminino</option></select></div>
       </div>
       <div class="dfld" style="margin-top:10px"><label>Nível de atividade (trabalho + treino)</label>
-        <select id="cAct" style="width:100%;padding:11px 8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:600 13px inherit">
+        <select id="cAct" class="dsel">
           <option value="1.2" ${p.act==1.2?'selected':''}>Sedentário — sem treino, trabalho sentado</option>
           <option value="1.375" ${p.act==1.375?'selected':''}>Leve — treino 1-3x/sem</option>
           <option value="1.5" ${(!p.act||p.act==1.5)?'selected':''}>Moderado — treino 3-5x/sem, trabalho sentado</option>
@@ -1348,16 +1385,17 @@ function renderDiet(){
           <option value="1.9" ${p.act==1.9?'selected':''}>Muito intenso — 2x/dia ou trabalho físico</option>
         </select>
       </div>
-      <button class="btn ghost" id="ccalc" style="margin-top:10px">Calcular e aplicar como TDEE inicial</button>
-      <p class="note" style="margin-top:8px;font-size:12px;color:var(--faint)">Com % de gordura preenchido usa Katch-McArdle (massa magra); sem, usa Mifflin-St Jeor. O resultado substitui o campo "TDEE inicial" e zera o check-in do coach.</p>
+      <button class="btn ghost" id="ccalc" style="margin-top:12px">Calcular e aplicar como TDEE inicial</button>
+      <p class="note" style="margin-top:8px;font-size:12.5px;color:var(--faint)">Com % de gordura usa Katch-McArdle (massa magra); sem, Mifflin-St Jeor. O resultado substitui o TDEE inicial e recalcula as metas.</p>
     </details>
-    <button class="btn ghost" id="dsetsave" style="margin-top:10px">Salvar objetivo</button>
-  </div>
-  <div class="card">
-    <h3>Últimos registros</h3>
-    ${dietDates().slice(-14).reverse().map(d=>{const e=diet.entries[d];return `<div class="dhist"><span class="dd">${d.slice(8,10)}/${d.slice(5,7)}</span><span>${e.weight!=null&&e.weight!==''?fmt(e.weight)+' kg':'—'}${e.inc?' ⚠️':''}</span><span>${e.kcal!=null&&e.kcal!==''?fmt(e.kcal)+' kcal':'—'}</span><button class="del" data-dd="${d}">✕</button></div>`}).join('')||'<div class="empty">Nenhum registro ainda.</div>'}
-    <button class="btn ghost" id="dexp" style="margin-top:12px">⬇ Exportar dieta (CSV / Excel)</button>
-  </div>`;
+    <button class="btn" id="dsetsave" style="margin-top:14px">Salvar objetivo</button>
+  </details></div>
+  <div class="card"><details class="fold" id="flog" ${dietFold.log?'open':''}><summary>Últimos registros</summary>
+    <div style="margin-top:6px">${dietDates().slice(-14).reverse().map(d=>{const e=diet.entries[d];return `<div class="dhist"><span class="dd">${d.slice(8,10)}/${d.slice(5,7)}</span><span>${e.weight!=null&&e.weight!==''?fmt(e.weight)+' kg':'—'}${e.inc?' <span class="tag">incompleto</span>':''}</span><span>${e.kcal!=null&&e.kcal!==''?fmt(e.kcal)+' kcal':'—'}</span><button class="del" data-dd="${d}" aria-label="Apagar registro">✕</button></div>`}).join('')||'<div class="empty">Nenhum registro ainda.</div>'}</div>
+    <button class="btn ghost" id="dexp" style="margin-top:12px">Exportar dieta (CSV / Excel)</button>
+  </details></div>`;
+  document.getElementById('fgoal').ontoggle=e=>{dietFold.goal=e.target.open};
+  document.getElementById('flog').ontoggle=e=>{dietFold.log=e.target.open};
   requestAnimationFrame(drawDietChart);
   const loadW=d=>{const e=diet.entries[d]||{};document.getElementById('dweight').value=e.weight??''};
   const loadF=d=>{const e=diet.entries[d]||{};document.getElementById('dkcal').value=e.kcal??'';document.getElementById('dprot').value=e.prot??'';document.getElementById('dinc').checked=!!e.inc};
@@ -1449,51 +1487,114 @@ function drawDietChart(){
   const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
   const trend=computeTrend();
   const all=dietDates().filter(d=>diet.entries[d].weight!=null&&diet.entries[d].weight!=='');
-  ctx.font='11px ui-monospace,monospace';
-  if(all.length<2){ctx.fillStyle='#5c636c';ctx.fillText('Registre pesagens para ver o gráfico',20,110);return}
+  ctx.font='600 10.5px -apple-system,BlinkMacSystemFont,sans-serif';
+  const cFaint=cssv('--faint'), cGrid=cssv('--chart-grid'), cDot=cssv('--chart-dot'), cAcc=cssv('--accent');
+  if(all.length<2){ctx.fillStyle=cFaint;ctx.font='14px -apple-system,sans-serif';ctx.fillText('Registre pesagens para ver o gráfico',4,105);return}
   const endT=new Date(all[all.length-1]).getTime();
   const fromT=dietRange===0?new Date(all[0]).getTime():endT-dietRange*86400000;
   const ds=all.filter(d=>new Date(d).getTime()>=fromT);
-  if(ds.length<2){ctx.fillStyle='#5c636c';ctx.fillText('Poucos dados no período',20,110);return}
+  if(ds.length<2){ctx.fillStyle=cFaint;ctx.font='14px -apple-system,sans-serif';ctx.fillText('Poucos dados no período',4,105);return}
   let mn=Infinity,mx=-Infinity;
   ds.forEach(d=>{mn=Math.min(mn,+diet.entries[d].weight,trend[d]);mx=Math.max(mx,+diet.entries[d].weight,trend[d])});
   const pad=(mx-mn)*0.15||0.5;mn-=pad;mx+=pad;
   const X=d=>38+((new Date(d).getTime()-fromT)/(endT-fromT||1))*(W-50);
   const Y=v=>H-22-((v-mn)/(mx-mn))*(H-40);
-  ctx.strokeStyle='#2b3138';ctx.fillStyle='#5c636c';ctx.lineWidth=1;
+  ctx.strokeStyle=cGrid;ctx.fillStyle=cFaint;ctx.lineWidth=1;
   for(let i=0;i<=3;i++){
     const v=mn+(mx-mn)*i/3, y=Y(v);
     ctx.beginPath();ctx.moveTo(36,y);ctx.lineTo(W-8,y);ctx.stroke();
     ctx.fillText(v.toFixed(1),2,y+4);
   }
-  ctx.fillStyle='#6b7280';
+  ctx.fillStyle=cDot;
   ds.forEach(d=>{ctx.beginPath();ctx.arc(X(d),Y(+diet.entries[d].weight),2.6,0,7);ctx.fill()});
-  ctx.strokeStyle='#f5a623';ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.beginPath();
+  ctx.strokeStyle=cAcc;ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
   ds.forEach((d,i)=>{const x=X(d),y=Y(trend[d]);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
   ctx.stroke();
 }
 
-/* ============ Hevy sync ============ */
-const normName=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
-function matchProgramEx(he){
-  for(const wo of program)for(const ex of wo.exercises)if(ex.hevyId&&ex.hevyId===he.exercise_template_id)return ex;
-  const ht=normName(he.title);
-  if(!ht)return null;
-  const hset=new Set(ht.split(' ').filter(t=>t.length>3));
-  let best=null,bestScore=0;
-  for(const wo of program)for(const ex of wo.exercises){
-    if(ex.hevyId)continue; /* já vinculado a outro template — nunca roubar o vínculo */
-    const eset=new Set(normName(ex.name).split(' ').filter(t=>t.length>3));
-    let score=0;
-    for(const t of eset)if(hset.has(t))score++;
-    if(score>bestScore){bestScore=score;best=ex}
+/* ============ Hevy: o programa vem das rotinas, o site faz a progressão ============
+   - Rotinas do Hevy definem treinos, exercícios, séries e faixas de reps (atualizados a cada sync).
+   - RIR alvo e incremento de carga são do site e ficam preservados por exercício.
+   - Sessões casam pelo ID do template do Hevy: primeiro dentro do treino da sessão, depois no programa todo.
+   - Exercícios fora das rotinas ficam no histórico, mas não alimentam a progressão. */
+const normName=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+let hevyState='';
+async function hevyGet(path,page){
+  const r=await fetch('https://api.hevyapp.com/v1/'+path+'?page='+page+'&pageSize=10',{headers:{'api-key':hevyKey}});
+  if(r.status===404&&page>1)return null; /* passou da última página */
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return r.json();
+}
+async function hevyRoutines(){
+  const out=[];
+  for(let p=1;p<=10;p++){
+    const d=await hevyGet('routines',p);if(!d)break;
+    const l=d.routines||[];out.push(...l);
+    if(l.length<10||(d.page_count!=null&&p>=d.page_count))break;
   }
-  /* exige 2+ palavras distintas em comum — 1 palavra ("press") não basta */
-  if(best&&bestScore>=2){best.hevyId=he.exercise_template_id;return best}
+  return out;
+}
+function hevyRepRange(he){
+  const work=(he.sets||[]).filter(s=>s.type!=='warmup');
+  let rmin=null,rmax=null;
+  for(const s of work){
+    const lo=s.rep_range&&s.rep_range.start!=null?+s.rep_range.start:(s.reps!=null?+s.reps:null);
+    const hi=s.rep_range&&s.rep_range.end!=null?+s.rep_range.end:(s.reps!=null?+s.reps:null);
+    if(lo!=null)rmin=rmin==null?lo:Math.min(rmin,lo);
+    if(hi!=null)rmax=rmax==null?hi:Math.max(rmax,hi);
+  }
+  return{nSets:Math.max(1,work.length),rmin,rmax};
+}
+function applyRoutines(routines){
+  let created=0,newEx=0;
+  const claimed=new Set(), seenRid=new Set();
+  for(const rt of routines){
+    seenRid.add(rt.id);
+    let wo=program.find(w=>w.hevyRid===rt.id)||program.find(w=>!w.hevyRid&&normName(w.name)===normName(rt.title));
+    if(!wo){wo={id:uid(),name:rt.title||'Treino',hevyRid:rt.id,exercises:[]};program.push(wo);created++}
+    else{wo.hevyRid=rt.id;wo.name=rt.title||wo.name}
+    const newList=[];
+    for(const he of (rt.exercises||[])){
+      const tid=he.exercise_template_id||null;
+      const{nSets,rmin,rmax}=hevyRepRange(he);
+      /* cada vaga de rotina tem seu próprio exercício: o mesmo template em dois treinos gera dois exercícios, com progressões separadas */
+      let ex=null;
+      if(tid){
+        ex=wo.exercises.find(x=>x.hevyId===tid&&!claimed.has(x));
+        if(!ex)for(const w2 of program){ex=w2.exercises.find(x=>x.hevyId===tid&&!claimed.has(x));if(ex)break}
+      }
+      if(ex){ /* já existe: preserva id (histórico), RIR e incremento */
+        ex.name=he.title||ex.name;
+        ex.sets=nSets;
+        if(rmin!=null)ex.repMin=rmin;
+        if(rmax!=null)ex.repMax=Math.max(rmax,ex.repMin);
+        if(he.rest_seconds)ex.rest=+he.rest_seconds;
+      }else{
+        const rMin=rmin!=null?rmin:8, rMax=rmax!=null?Math.max(rmax,rMin):12;
+        ex={id:uid(),name:he.title||'Exercício',sets:nSets,repMin:rMin,repMax:rMax,rirMin:1,rirMax:2,inc:rMin<=8?2.5:1.25,rest:he.rest_seconds?+he.rest_seconds:120,hevyId:tid};
+        newEx++;
+      }
+      claimed.add(ex);newList.push(ex);
+    }
+    wo.exercises=newList;
+  }
+  /* o programa passa a ser só o que existe no Hevy — o histórico dos treinos removidos é preservado */
+  const before=program.length;
+  program=program.filter(w=>w.hevyRid&&seenRid.has(w.hevyRid)&&w.exercises.length);
+  if(!program.find(w=>w.id===selWorkout))selWorkout=program[0]?.id;
+  return{created,newEx,removed:before-program.length};
+}
+function hevyWorkoutFor(id,title){
+  return (id&&program.find(x=>x.hevyRid===id))||program.find(x=>normName(x.name)===normName(title))||null;
+}
+function hevyMatchEx(tid,wo){
+  if(!tid)return null;
+  if(wo){const f=wo.exercises.find(x=>x.hevyId===tid);if(f)return f}
+  for(const w of program){const f=w.exercises.find(x=>x.hevyId===tid);if(f)return f}
   return null;
 }
-function convertHevy(w){
-  const entries=[];
+function hevySession(w,prev){
+  const wo=hevyWorkoutFor(w.routine_id,w.title), entries=[];
   for(const he of (w.exercises||[])){
     const sets=(he.sets||[]).filter(s=>s.type!=='warmup').map(s=>({
       w:s.weight_kg!=null?+s.weight_kg:null,
@@ -1501,107 +1602,72 @@ function convertHevy(w){
       rir:s.rpe!=null?Math.max(0,Math.round(10-s.rpe)):null
     }));
     if(!sets.some(s=>s.r!=null))continue;
-    const m=matchProgramEx(he);
-    entries.push({exId:m?m.id:'hevy_'+(he.exercise_template_id||normName(he.title)),exName:m?m.name:(he.title||'Exercício'),sets});
+    const tid=he.exercise_template_id||null, m=hevyMatchEx(tid,wo);
+    entries.push({exId:m?m.id:'hevy_'+(tid||normName(he.title)),exName:m?m.name:(he.title||'Exercício'),tid,sets});
   }
-  return entries;
+  if(!entries.length)return null;
+  return{id:prev?prev.id:uid(),hevyId:w.id,routineId:w.routine_id||null,date:w.start_time||w.created_at||new Date().toISOString(),workoutId:wo?wo.id:'hevy',workoutName:w.title||'Treino Hevy',entries};
 }
-async function hevySync(manual){
-  if(!hevyKey)return{n:0};
-  const known=new Set(history.map(h=>h.hevyId).filter(Boolean));
-  let added=0,page=1;
-  const maxPages=manual?60:3;
+function relinkHevy(){ /* reaponta o histórico importado para o programa atual, sem chamar a API */
+  for(const s of history){
+    if(!s.hevyId)continue;
+    const wo=program.find(w=>w.id===s.workoutId)||hevyWorkoutFor(s.routineId,s.workoutName);
+    if(wo)s.workoutId=wo.id;
+    for(const e of s.entries){
+      const tid=e.tid||(String(e.exId).startsWith('hevy_')?String(e.exId).slice(5):null);
+      const m=hevyMatchEx(tid,wo);
+      if(m){e.exId=m.id;e.exName=m.name;e.tid=tid}
+    }
+  }
+}
+/* sync completo: rotinas → treinos → revínculo. Grava uma vez só, e só se algo mudou.
+   auto (abertura do app): envia à nuvem apenas se o download da nuvem deu certo nesta sessão.
+   full: revisita todo o histórico do Hevy e atualiza as sessões no lugar (nunca apaga). */
+async function hevyFullSync(auto,full){
+  if(!hevyKey)return{n:0,upd:0};
+  const before=JSON.stringify([program,history]);
+  const out={n:0,upd:0,rt:null,err:''};
   try{
-    while(page<=maxPages){
-      const r=await fetch('https://api.hevyapp.com/v1/workouts?page='+page+'&pageSize=10',{headers:{'api-key':hevyKey}});
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      const data=await r.json();
-      const list=data.workouts||[];
-      let newInPage=0;
+    const routines=await hevyRoutines();
+    if(routines.length)out.rt=applyRoutines(routines); /* sem rotinas (ou falha): mantém o programa atual */
+  }catch(e){out.err='rotinas: '+(e&&e.message||'rede/CORS')}
+  const byId=new Map(history.filter(h=>h.hevyId).map(h=>[h.hevyId,h]));
+  try{
+    for(let p=1;p<=(full?60:10);p++){
+      const d=await hevyGet('workouts',p);if(!d)break;
+      const list=d.workouts||[];
+      let fresh=0;
       for(const w of list){
-        if(!w.id||known.has(w.id))continue;
-        const entries=convertHevy(w);
-        if(!entries.length)continue;
-        const title=w.title||'Treino Hevy';
-        const wo=program.find(x=>normName(x.name)===normName(title));
-        history.push({id:uid(),hevyId:w.id,date:w.start_time||w.created_at||new Date().toISOString(),workoutId:wo?wo.id:'hevy',workoutName:title,entries});
-        known.add(w.id);added++;newInPage++;
+        if(!w.id)continue;
+        const prev=byId.get(w.id);
+        if(prev&&!full)continue;
+        const s=hevySession(w,prev);
+        if(!s)continue;
+        if(prev){Object.assign(prev,s);out.upd++}
+        else{history.push(s);byId.set(w.id,s);out.n++;fresh++}
       }
-      if(list.length<10)break;
-      if(!manual&&newInPage===0)break; /* sync rápido: parou de achar novidade */
-      page++;
+      if(list.length<10||(d.page_count!=null&&p>=d.page_count))break;
+      if(!full&&!fresh)break; /* sync rápido: parou de achar novidade */
     }
-    if(added){
-      history.sort((a,b)=>new Date(a.date)-new Date(b.date));
-      await saveHistory();await saveProgram();/* persiste os hevyId mapeados */
-      await touchAndPush();
-      hevyLast=new Date().toISOString();await sSet(K_HSYNC,hevyLast);
-    }
-    return{n:added};
-  }catch(e){return{n:added,err:e&&e.message?e.message:'rede/CORS'}}
+  }catch(e){out.err=(out.err?out.err+' · ':'')+'treinos: '+(e&&e.message||'rede/CORS')}
+  relinkHevy();
+  history.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  out.changed=JSON.stringify([program,history])!==before;
+  if(out.changed){
+    await saveProgram();await saveHistory();
+    if(!auto||pullOk)await touchAndPush();
+  }
+  if(!out.err){hevyLast=new Date().toISOString();await sSet(K_HSYNC,hevyLast)}
+  hevyState=out.err?'⚠️ Falha parcial — '+out.err:'';
+  return out;
 }
-
-async function hevyImportRoutines(){
-  if(!hevyKey)return{err:'configure a chave do Hevy na aba Dados'};
-  let page=1, routines=[];
-  try{
-    while(page<=10){
-      const r=await fetch('https://api.hevyapp.com/v1/routines?page='+page+'&pageSize=10',{headers:{'api-key':hevyKey}});
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      const d=await r.json();
-      const list=d.routines||[];
-      routines.push(...list);
-      if(list.length<10)break;
-      page++;
-    }
-  }catch(e){return{err:e&&e.message?e.message:'rede/CORS'}}
-  if(!routines.length)return{err:'nenhuma rotina encontrada no Hevy'};
-  let created=0,updated=0,moved=0,newEx=0;
-  const seenRid=new Set();
-  for(const rt of routines){
-    seenRid.add(rt.id);
-    let wo=program.find(w=>w.hevyRid===rt.id)||program.find(w=>normName(w.name)===normName(rt.title));
-    if(!wo){wo={id:uid(),name:rt.title||'Treino',hevyRid:rt.id,exercises:[]};program.push(wo);created++}
-    else{wo.hevyRid=rt.id;wo.name=rt.title||wo.name;updated++}
-    const newList=[];
-    for(const he of (rt.exercises||[])){
-      const tid=he.exercise_template_id;
-      const work=(he.sets||[]).filter(s=>s.type!=='warmup');
-      const nSets=Math.max(1,work.length);
-      let rmin=null,rmax=null;
-      for(const s of work){
-        const lo=s.rep_range&&s.rep_range.start!=null?+s.rep_range.start:(s.reps!=null?+s.reps:null);
-        const hi=s.rep_range&&s.rep_range.end!=null?+s.rep_range.end:(s.reps!=null?+s.reps:null);
-        if(lo!=null)rmin=rmin==null?lo:Math.min(rmin,lo);
-        if(hi!=null)rmax=rmax==null?hi:Math.max(rmax,hi);
-      }
-      let ex=null,fromWo=null;
-      if(tid)for(const w2 of program){const f=w2.exercises.find(x=>x.hevyId===tid);if(f){ex=f;fromWo=w2;break}}
-      if(ex){
-        /* já existe: preserva id (histórico), RIR e incremento; move de treino se necessário */
-        if(fromWo!==wo){fromWo.exercises=fromWo.exercises.filter(x=>x!==ex);moved++}
-        ex.name=he.title||ex.name;
-        ex.sets=nSets;
-        if(rmin!=null)ex.repMin=rmin;
-        if(rmax!=null)ex.repMax=Math.max(rmax,ex.repMin);
-      }else{
-        const rMin=rmin!=null?rmin:8, rMax=rmax!=null?Math.max(rmax,rMin):12;
-        ex={id:uid(),name:he.title||'Exercício',sets:nSets,repMin:rMin,repMax:rMax,rirMin:1,rirMax:2,inc:rMin<=8?2.5:1.25,rest:120,hevyId:tid||null};
-        newEx++;
-      }
-      newList.push(ex);
-    }
-    if(newList.length)wo.exercises=newList;
-  }
-  const obsolete=program.filter(w=>(w.hevyRid&&!seenRid.has(w.hevyRid))||w.exercises.length===0);
-  if(obsolete.length){
-    if(confirm('Estes treinos não existem mais no Hevy (ou ficaram vazios):\n\n'+obsolete.map(w=>'• '+w.name).join('\n')+'\n\nRemover do programa? (o histórico deles é preservado)')){
-      program=program.filter(w=>!obsolete.includes(w));
-    }
-  }
-  if(!program.find(w=>w.id===selWorkout))selWorkout=program[0]?.id;
-  await saveProgram();await touchAndPush();
-  return{created,updated,moved,newEx};
+function hevyMsg(r){
+  if(r.err&&!r.changed)return '⚠️ Hevy: '+r.err;
+  const p=[];
+  if(r.n)p.push(r.n+' treino(s) novo(s)');
+  if(r.rt&&r.rt.newEx)p.push(r.rt.newEx+' exercício(s) novo(s) no programa');
+  if(r.rt&&r.rt.removed)p.push(r.rt.removed+' treino(s) fora do Hevy removido(s) do programa');
+  return (r.err?'⚠️ ':'✓ ')+(p.length?p.join(' · '):(r.changed?'Programa e histórico atualizados':'Tudo em dia com o Hevy'));
 }
 
 /* ============ util ============ */
@@ -1632,7 +1698,11 @@ function pinInit(){
     }
   });
 }
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(tab==='program')harvest();tab=b.dataset.tab;render()});
+function goTab(t){if(tab==='program')harvest();tab=t;render();window.scrollTo(0,0)}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>goTab(b.dataset.tab));
+document.getElementById('gear').onclick=()=>goTab('data');
+/* tema claro/escuro mudou no aparelho: redesenha (gráficos em canvas leem as cores na hora) */
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(!document.getElementById('lock'))render()})}catch(e){}
 pinInit();
 </script>
 </body>
