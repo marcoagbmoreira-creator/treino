@@ -182,7 +182,7 @@ details .note{margin-top:8px}
 .dlt.up{color:var(--up)}.dlt.dn{color:var(--hold)}.dlt.z{color:var(--faint)}
 .facts{display:grid;gap:12px;margin-top:16px}
 .fact{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;font-size:14px}
-.fact .fl{color:var(--muted)}
+.fact .fl{color:var(--muted);flex-shrink:0}
 .fact .fv{text-align:right;font-weight:650}
 .fact .fv small{display:block;font-size:12.5px;font-weight:500;color:var(--faint)}
 
@@ -555,7 +555,7 @@ function renderHome(){
     if(!body)body='<div class="s">Sem registros neste dia.</div>';
     detail=`<div class="daydetail"><div class="dtitle">${dLabel}</div>${body}</div>`;
   }
-  const ckDue=checkinDueISO();
+  const ckDue=checkinDueISO()&&!computeCheckin().paused; /* pausado não pede ação: o aviso fica só na Dieta */
   view.innerHTML=`${ckDue?`<div class="card hl">
     <div class="eyebrow">Check-in semanal</div>
     <h3 style="margin-top:4px">Hora de revisar suas metas</h3>
@@ -1162,8 +1162,10 @@ function weeklyRate(){
 /* ---- metas + check-in semanal (MacroFactor-style) ----
    Kcal e macros ficam travados num snapshot (settings.lastCoach) e só mudam:
    (a) no check-in semanal, quando o usuário aplica a revisão; (b) ao mudar o objetivo/perfil.
-   Nada aqui grava durante a renderização. */
-const CK_MAX_STEP=200, CK_MIN_DAYS=4;
+   Nada aqui grava durante a renderização.
+   Sem dados recentes o check-in fica pausado e as metas não mudam (mesmo critério do MacroFactor:
+   1 pesagem e 4 dias de kcal completos em 7 dias). Ele abre sozinho quando o mínimo é atingido. */
+const CK_MAX_STEP=200, CK_MIN_DAYS=4, CK_MIN_WEIGH=1, CK_MIN_KCAL=4;
 const isoLocal=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d,12)}; /* evita o fuso UTC de new Date('AAAA-MM-DD') */
 const daysBetween=(a,b)=>Math.round((isoLocal(b)-isoLocal(a))/86400000);
 const dmy=iso=>iso.slice(8,10)+'/'+iso.slice(5,7);
@@ -1210,18 +1212,24 @@ function nextCheckin(){
 function computeCheckin(){
   const s=diet.settings, lc=s.lastCoach, today=todayISO();
   const t=computeTDEE(), raw=rawGoal(t?t.tdee:s.tdee0);
-  const step=Math.max(-CK_MAX_STEP,Math.min(CK_MAX_STEP,raw-lc.goal));
+  const d7=isoLocal(today);d7.setDate(d7.getDate()-6);
+  const last7=dietDates().filter(d=>d>=dISO(d7)&&d<=today);
+  const nW7=last7.filter(d=>diet.entries[d].weight!=null&&diet.entries[d].weight!=='').length;
+  const nK7=last7.filter(d=>diet.entries[d].kcal!=null&&diet.entries[d].kcal!==''&&!diet.entries[d].inc).length;
+  const paused=!t||nW7<CK_MIN_WEIGH||nK7<CK_MIN_KCAL;
+  const step=paused?0:Math.max(-CK_MAX_STEP,Math.min(CK_MAX_STEP,raw-lc.goal));
   const cur=currentTargets(), nt=buildTargets(lc.goal+step);
   const win=dietDates().filter(d=>d>lc.date&&d<=today);
   const nW=win.filter(d=>diet.entries[d].weight!=null&&diet.entries[d].weight!=='').length;
   const kd=win.filter(d=>diet.entries[d].kcal!=null&&diet.entries[d].kcal!==''&&!diet.entries[d].inc);
   const avgK=kd.length?Math.round(kd.reduce((a,d)=>a+ +diet.entries[d].kcal,0)/kd.length):null;
   const target=s.mode==='deficit'?-s.rate:(s.mode==='surplus'?s.rate:0);
-  return{cur,nt,step,raw,t,days:daysBetween(lc.date,today),nW,nK:kd.length,avgK,
+  return{paused,nW7,nK7,cur,nt,step,raw,t,days:daysBetween(lc.date,today),nW,nK:kd.length,avgK,
     trendPrev:lc.trend!=null?lc.trend:trendAt(lc.date),trendNow:nt.trend,tdeePrev:lc.tdee,rate:weeklyRate(),target};
 }
 async function doCheckin(accept){
   const s=diet.settings, prev=s.lastCoach, c=computeCheckin();
+  if(c.paused)return;
   const keep={goal:c.cur.goal,prot:c.cur.prot,carbs:c.cur.carbs,fatG:c.cur.fatG,wkg:c.cur.wkg};
   s.lastCoach=accept?c.nt:Object.assign({},c.nt,keep); /* "manter" também registra o check-in e reinicia a semana */
   s.checkins=(s.checkins||[]).concat({date:s.lastCoach.date,prevGoal:prev.goal,goal:s.lastCoach.goal,prot:s.lastCoach.prot,carbs:s.lastCoach.carbs,fatG:s.lastCoach.fatG,
@@ -1251,8 +1259,9 @@ function checkinCard(){
   const dcls=v=>v>0?'up':(v<0?'dn':'z');
   const hist=(s.checkins||[]).slice(-8).reverse();
   const histHtml=hist.length?`<details style="margin-top:12px"><summary>Histórico de check-ins</summary>${hist.map(h=>{const d=h.goal-h.prevGoal;return `<div class="dhist"><span class="dd">${dmy(h.date)}</span><span>${fmt(h.goal)} kcal${h.applied?'':' <span class="tag">mantida</span>'}</span><span class="dlt ${dcls(d)}">${d?sg(d):'='}</span><span style="color:var(--muted)">P${h.prot} C${h.carbs} G${h.fatG}</span></div>`}).join('')}</details>`:'';
+  const dows=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
   if(!due){
-    const nx=nextCheckin(), dows=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+    const nx=nextCheckin();
     return `<div class="card">
       <h3>Check-in semanal</h3>
       <p class="note" style="margin-top:6px">Próximo: <b>${wdLabel(nx.iso)}</b> (em ${nx.days} ${nx.days===1?'dia':'dias'}). Até lá calorias e macros ficam fixos — as metas só são revisadas no check-in, como no MacroFactor.</p>
@@ -1261,6 +1270,21 @@ function checkinCard(){
     </div>`;
   }
   const c=computeCheckin();
+  if(c.paused){
+    const need=(n,min)=>`${n>=min?'✓ ':''}${n} de ${min}<small>últimos 7 dias</small>`;
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3>Check-in semanal</h3><span class="badge keep">Pausado</span></div>
+      <p class="note" style="margin-top:6px">Suas metas continuam iguais. Faltam registros recentes para saber se é preciso mudar alguma coisa.</p>
+      <div class="facts">
+        <div class="fact"><span class="fl">Pesagens</span><span class="fv">${need(c.nW7,CK_MIN_WEIGH)}</span></div>
+        <div class="fact"><span class="fl">Dias de kcal completos</span><span class="fv">${need(c.nK7,CK_MIN_KCAL)}</span></div>
+        ${c.t?'':'<div class="fact"><span class="fl">Gasto estimado</span><span class="fv">calibrando<small>pede 4 pesagens em 7+ dias e 4 dias de kcal</small></span></div>'}
+      </div>
+      <p class="note" style="margin-top:12px;font-size:13px;color:var(--faint)">Quando atingir o mínimo, o check-in abre sozinho.</p>
+      <div class="dfld" style="margin-top:12px"><label>Dia do check-in</label><select id="ckdow" class="dsel">${dows.map((n,i)=>`<option value="${i}" ${(s.checkinDow??1)===i?'selected':''}>${n}</option>`).join('')}</select></div>
+      ${histHtml}
+    </div>`;
+  }
   const cls=c.step>0?'up':(c.step<0?'stall':'keep'), label=c.step>0?'AUMENTAR':(c.step<0?'REDUZIR':'MANTER');
   const row=(lb,a,b,u)=>{const d=b-a;return `<div class="ckrow"><span class="lb">${lb}</span><span>${fmt(a)}${u}</span><span>${fmt(b)}${u}</span><span class="dlt ${dcls(d)}">${d?sg(d)+u:'='}</span></div>`};
   const facts=[], warn=[];
@@ -1286,7 +1310,7 @@ function checkinCard(){
 }
 function renderDiet(){
   const t=computeTDEE(), rate=weeklyRate(), tk=currentTargets(), trend=computeTrend();
-  const M=tk, ckPending=!!checkinDueISO(), ckHtml=checkinCard(), nx=nextCheckin();
+  const M=tk, ckPending=!!checkinDueISO(), ckPaused=ckPending&&computeCheckin().paused, ckHtml=checkinCard(), nx=nextCheckin();
   const wd=Object.keys(trend).sort();
   const curTrend=wd.length?trend[wd[wd.length-1]]:null;
   const first=wd.length?trend[wd[0]]:null;
@@ -1307,7 +1331,7 @@ function renderDiet(){
       <div class="mac"><div class="ml"><i class="m-c"></i>Carbo</div><div class="mv">${M.carbs}<small>g</small></div></div>
       <div class="mac"><div class="ml"><i class="m-f"></i>Gordura</div><div class="mv">${M.fatG}<small>g</small></div></div>
     </div>
-    <p class="note" style="margin-top:12px;font-size:13px">${ckPending?'<b>Check-in pendente</b> — revise acima.':'Fixas até o check-in de <b>'+wdLabel(nx.iso)+'</b>.'} Proteína pelo peso-tendência (${fmt((M.wkg||0).toFixed(1))} kg), gordura como piso, carboidrato completa — concentre-o perto do treino.</p>
+    <p class="note" style="margin-top:12px;font-size:13px">${ckPaused?'<b>Check-in pausado</b> — metas mantidas.':(ckPending?'<b>Check-in pendente</b> — revise acima.':'Fixas até o check-in de <b>'+wdLabel(nx.iso)+'</b>.')} Proteína pelo peso-tendência (${fmt((M.wkg||0).toFixed(1))} kg), gordura como piso, carboidrato completa — concentre-o perto do treino.</p>
   </div>
   <div class="card">
     <h3>Registrar</h3>
