@@ -274,7 +274,7 @@ details .note{margin-top:8px}
 <script>
 /* ============ state & storage ============ */
 const K_PROG='ul_program_v1', K_HIST='ul_history_v1', K_KEY='ul_apikey_v1', K_MODEL='ul_aimodel_v1', K_GH='ul_ghtoken_v1', K_GIST='ul_gist_v1', K_UPD='ul_updated_v1', K_DIET='ul_diet_v1', K_HEVY='ul_hevykey_v1', K_HSYNC='ul_hevysync_v1', K_HV2='ul_hevyv2_v1';
-let program=[], history=[], tab='home', selWorkout=null, memOnly=false, apiKey='', aiModel='gemini-2.5-flash', ghToken='', gistId='', updatedAt=0, syncState='', hevyKey='', hevyLast='', pullOk=false;
+let program=[], history=[], tab='home', selWorkout=null, memOnly=false, apiKey='', aiModel='gemini-3.8-flash', ghToken='', gistId='', updatedAt=0, syncState='', hevyKey='', hevyLast='', pullOk=false;
 let dietFold={goal:false,log:false};
 let diet={entries:{},settings:{mode:'deficit',rate:0.4,protTarget:180,protPerKg:2.1,fatPct:25,tdee0:2820,checkinDow:1,checkins:[]}}, dietRange=30, homeMonth=new Date(), homeSel=null;
 
@@ -324,7 +324,8 @@ async function boot(){
   program=await sGet(K_PROG)||[];
   history=await sGet(K_HIST)||[];
   apiKey=await sGet(K_KEY)||'';
-  aiModel=await sGet(K_MODEL)||'gemini-2.5-flash';
+  aiModel=await sGet(K_MODEL)||'';
+  if(aiRetired(aiModel)){aiModel=AI_MODELS[0];await sSet(K_MODEL,aiModel)} /* modelo antigo salvo (ex.: gemini-2.5-flash, descontinuado): troca pelo atual; fica só neste aparelho */
   ghToken=await sGet(K_GH)||'';
   gistId=await sGet(K_GIST)||'';
   updatedAt=await sGet(K_UPD)||0;
@@ -992,103 +993,220 @@ function download(name,content,type){
   a.download=name;a.click();URL.revokeObjectURL(a.href);
 }
 
-/* ============ AI analysis (Claude) ============ */
-let lastAI=null;
+/* ============ análise (Gemini): uma para a dieta, outra para o treino ============ */
+/* O Google aposenta modelos com frequência (o 2.5 Flash, que o app usava, foi descontinuado em 2026). Por isso a chamada
+   tenta o modelo salvo e, se ele não existir mais ou estiver sem cota, passa para o próximo da lista e guarda o que funcionou. */
+const AI_MODELS=['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash-lite','gemini-4-hydrogen'];
+const aiRetired=m=>!m||/^gemini-(1|2)[.-]/.test(m); /* gerações já desligadas ou em desligamento */
+let lastAI={diet:null,train:null,ask:null};
+const AI_KIND={
+  diet:{title:'Análise da dieta',busy:'Analisando sua dieta…'},
+  train:{title:'Análise do treino',busy:'Analisando seu treino…'},
+  ask:{title:'Resposta',busy:'Pensando na resposta…'}
+};
+function aiResHtml(k){
+  const r=lastAI[k];
+  return r?`<div class="ai-out">${r.html}</div><p class="note" style="margin-top:8px;font-size:12.5px;color:var(--faint)">${r.when} · ${esc(r.model)}</p>`:'';
+}
 function renderAI(){
+  const dd=dietDates(), nW=dd.filter(d=>hasW(diet.entries[d])).length, nK=dd.filter(d=>hasK(diet.entries[d])).length;
+  const ds=dietStartISO(), wk=ds?Math.max(0,daysBetween(ds,todayISO()))/7:null;
+  const lastS=history.length?history[history.length-1].date:null;
   view.innerHTML=`
   <div class="card">
-    <h3>Análise inteligente</h3>
-    <p class="note" style="margin:8px 0 12px">Envia um resumo do seu histórico para o <b>Gemini</b> e devolve uma leitura do progresso: estagnações, padrão de RIR, fadiga em déficit e ações concretas. Seus dados continuam salvos <b>apenas nesta página</b> — o modelo lê um recorte a cada análise e não guarda nada.</p>
-    <button class="btn" id="aigo">Analisar meu progresso</button>
-    <p class="note" style="margin-top:10px;font-size:12px;color:var(--faint)">Funciona em qualquer navegador (inclusive no arquivo local) — basta configurar a chave gratuita do Google AI Studio abaixo, uma única vez.</p>
+    <h3>Análise da dieta</h3>
+    <div class="sub">${nW||nK?`${nW} ${nW===1?'pesagem':'pesagens'} · ${nK} ${nK===1?'dia':'dias'} de kcal${wk!=null?' · '+fmt(wk.toFixed(1))+' semanas de dieta':''}`:'Ainda sem registros na aba Dieta'}</div>
+    <p class="note" style="margin:10px 0 12px">Lê só a dieta: pesos registrados e tendência, tempo de dieta, calorias e macros (meta × o que você comeu), gasto estimado e os check-ins.</p>
+    <button class="btn" id="aidiet">Analisar dieta</button>
+    <div id="aires-diet">${aiResHtml('diet')}</div>
+  </div>
+  <div class="card">
+    <h3>Análise do treino</h3>
+    <div class="sub">${history.length?`${history.length} ${history.length===1?'sessão':'sessões'}${lastS?' · última em '+new Date(lastS).toLocaleDateString('pt-BR').slice(0,5):''}`:'Ainda sem sessões registradas'}</div>
+    <p class="note" style="margin:10px 0 12px">Lê só o treino: cargas, reps e RIR de cada exercício, frequência, estagnações e o que a progressão do app está sugerindo.</p>
+    <button class="btn" id="aitrain">Analisar treino</button>
+    <div id="aires-train">${aiResHtml('train')}</div>
   </div>
   <div class="card">
     <h3>Pergunta livre</h3>
-    <p class="note" style="margin:8px 0 10px">Pergunte algo sobre seu treino — a resposta considera seu programa e histórico atuais.</p>
-    <textarea id="aiq" placeholder="Ex.: devo antecipar o deload para a semana da prova?"></textarea>
+    <p class="note" style="margin:8px 0 10px">Pergunte o que quiser — a resposta considera sua dieta e seu treino atuais.</p>
+    <textarea id="aiq" placeholder="Ex.: já é hora de fazer uma pausa na dieta?"></textarea>
     <button class="btn ghost" id="aiask" style="margin-top:10px">Perguntar</button>
+    <div id="aires-ask">${aiResHtml('ask')}</div>
   </div>
   <div class="card">
     <details ${apiKey?'':'open'}>
       <summary>Chave do Gemini (Google AI Studio)</summary>
-      <p class="note" style="margin:8px 0 10px">Crie uma chave gratuita em <b>aistudio.google.com</b> → "Get API key", cole aqui e salve. O free tier cobre seu volume de uso com folga, e a análise funciona em qualquer navegador, inclusive no arquivo local. A chave fica guardada só no armazenamento desta página.</p>
+      <p class="note" style="margin:8px 0 10px">Crie uma chave gratuita em <b>aistudio.google.com</b> → "Get API key", cole aqui e salve. A chave fica guardada só no armazenamento desta página. A cada análise o Gemini recebe um resumo dos seus registros; nada mais sai do app.</p>
       <input type="text" id="aikey" placeholder="AIza..." value="${esc(apiKey||'')}" class="txtin">
       <div class="fld" style="margin-top:10px"><label>Modelo</label><input type="text" id="aimodel" value="${esc(aiModel)}" style="text-align:left;font-size:13px;padding:10px"></div>
+      <p class="note" style="margin-top:8px;font-size:12.5px;color:var(--faint)">Se este modelo sair do ar ou ficar sem cota, o app tenta sozinho os próximos (${AI_MODELS.join(', ')}) e guarda o que funcionar.</p>
       <div class="row2" style="margin-top:10px">
         <button class="btn ghost" id="aikeysave">Salvar</button>
         <button class="btn danger" id="aikeyclear">Remover</button>
       </div>
     </details>
-  </div>
-  <div id="aires">${lastAI?`<div class="card"><h3>Última análise</h3><div class="ai-out">${lastAI}</div></div>`:''}</div>`;
-  document.getElementById('aigo').onclick=()=>runAI(null);
-  document.getElementById('aiask').onclick=()=>{const q=document.getElementById('aiq').value.trim();if(!q){toast('Escreva a pergunta primeiro');return}runAI(q)};
-  document.getElementById('aikeysave').onclick=async()=>{apiKey=document.getElementById('aikey').value.trim();aiModel=document.getElementById('aimodel').value.trim()||'gemini-2.5-flash';await sSet(K_KEY,apiKey);await sSet(K_MODEL,aiModel);toast(apiKey?'✓ Configuração salva':'Chave vazia')};
+  </div>`;
+  document.getElementById('aidiet').onclick=()=>runAI('diet');
+  document.getElementById('aitrain').onclick=()=>runAI('train');
+  document.getElementById('aiask').onclick=()=>{const q=document.getElementById('aiq').value.trim();if(!q){toast('Escreva a pergunta primeiro');return}runAI('ask',q)};
+  document.getElementById('aikeysave').onclick=async()=>{apiKey=document.getElementById('aikey').value.trim();aiModel=document.getElementById('aimodel').value.trim()||AI_MODELS[0];await sSet(K_KEY,apiKey);await sSet(K_MODEL,aiModel);toast(apiKey?'✓ Configuração salva':'Chave vazia')};
   document.getElementById('aikeyclear').onclick=async()=>{apiKey='';await sSet(K_KEY,'');renderAI();toast('Chave removida')};
 }
-function buildContext(){
-  const lines=[];
-  lines.push('Perfil do atleta: homem, 1,86m, ~86kg, ~21% BF, intermediário (1+ ano), natural, recomposição em déficit leve (~2500 kcal, 180g proteína/dia), trabalho sedentário. Objetivo: V-taper (latíssimo + deltoide lateral prioritários; perna em manutenção deliberada). Programa Upper/Lower 3x/semana com dupla progressão autorregulada (faixa de reps + RIR alvo; topo da faixa em todas as séries → sobe carga).');
+const hasW=e=>e&&e.weight!=null&&e.weight!=='';
+const hasK=e=>e&&e.kcal!=null&&e.kcal!==''&&!e.inc;
+function dietStartISO(){ /* início da dieta: o que o usuário informou em "Objetivo e metas"; sem isso, o primeiro registro */
+  const dd=dietDates();
+  return diet.settings.dietStart||(dd.length?dd[0]:null);
+}
+function buildDietContext(){
+  const s=diet.settings, today=todayISO(), L=[], n1=v=>(+v).toFixed(1), sg=v=>(v>0?'+':'')+v;
+  const all=dietDates(), start=dietStartISO();
+  if(!all.length||!start)return 'DIETA: nenhum registro de peso ou calorias ainda.';
+  const tr=computeTrend(), twd=Object.keys(tr).sort(), M=currentTargets(), t=computeTDEE(), wr=weeklyRate();
+  const p=s.profile;
+  if(p&&(p.age||p.h))L.push('Perfil: '+(p.sex==='f'?'mulher':'homem')+(p.age?', '+p.age+' anos':'')+(p.h?', '+p.h+' cm':'')+(p.bf!=null?', ~'+p.bf+'% de gordura':'')+'.');
+  const modeTxt=s.mode==='deficit'?'déficit (perder '+s.rate+' kg/sem)':(s.mode==='surplus'?'superávit (ganhar '+s.rate+' kg/sem)':'manutenção');
+  const days=Math.max(0,daysBetween(start,today));
+  L.push('Objetivo atual: '+modeTxt+'. Início da dieta: '+dmy(start)+'/'+start.slice(0,4)+' — '+days+' dias ('+n1(days/7)+' semanas)'+(s.dietStart?'':' [data do primeiro registro; o atleta não informou outra]')+'.');
+  /* peso */
+  const ph=twd.filter(d=>d>=start);
+  if(ph.length){
+    const a=tr[ph[0]], b=tr[ph[ph.length-1]], span=daysBetween(ph[0],ph[ph.length-1]);
+    const vals=ph.map(d=>tr[d]);
+    L.push('Peso-tendência (média móvel, o que importa): '+n1(a)+' kg em '+dmy(ph[0])+' → '+n1(b)+' kg em '+dmy(ph[ph.length-1])+' ('+sg((b-a).toFixed(1))+' kg'
+      +(span>=7?'; média de '+sg(((b-a)/span*7).toFixed(2))+' kg/sem = '+sg(((b-a)/span*7/a*100).toFixed(2))+'% do peso/sem':'')+'). Mínimo '+n1(Math.min(...vals))+', máximo '+n1(Math.max(...vals))+' kg.'
+      +(wr!=null?' Ritmo nos últimos 14 dias: '+sg(wr.toFixed(2))+' kg/sem.':''));
+    const wdays=all.filter(d=>d>=start&&hasW(diet.entries[d]));
+    let gap=0;for(let i=1;i<wdays.length;i++)gap=Math.max(gap,daysBetween(wdays[i-1],wdays[i]));
+    const sinceLast=daysBetween(wdays[wdays.length-1],today);
+    L.push('Pesagens: '+wdays.length+' em '+(days+1)+' dias (~'+n1(wdays.length/Math.max(1,(days+1)/7))+' por semana). Maior intervalo sem pesar: '+Math.max(gap,sinceLast)+' dias. Última pesagem: '+dmy(wdays[wdays.length-1])+' ('+n1(diet.entries[wdays[wdays.length-1]].weight)+' kg na balança).');
+  }else L.push('Peso: nenhuma pesagem desde o início da dieta.');
+  /* metas */
+  const wkg=M.wkg||(twd.length?tr[twd[twd.length-1]]:null);
+  L.push('Metas atuais (fixas até o check-in semanal): '+M.goal+' kcal | proteína '+M.prot+' g'+(wkg?' ('+(M.prot/wkg).toFixed(1)+' g/kg)':'')+' | carboidrato '+M.carbs+' g | gordura '+M.fatG+' g'+(wkg?' ('+(M.fatG/wkg).toFixed(2)+' g/kg, '+Math.round(M.fatG*9/Math.max(1,M.goal)*100)+'% das kcal)':'')+'. Piso de calorias: '+(kcalFloor()?kcalFloor()+' kcal':'desligado')+'.');
+  /* ingestão */
+  const win=n=>{const d0=isoLocal(today);d0.setDate(d0.getDate()-(n-1));const from=dISO(d0);
+    const ds=all.filter(d=>d>=from&&d>=start&&hasK(diet.entries[d]));
+    const ps=ds.filter(d=>diet.entries[d].prot!=null&&diet.entries[d].prot!=='');
+    return{n:ds.length,avg:ds.length?Math.round(ds.reduce((x,d)=>x+ +diet.entries[d].kcal,0)/ds.length):null,pn:ps.length,pavg:ps.length?Math.round(ps.reduce((x,d)=>x+ +diet.entries[d].prot,0)/ps.length):null,ds}};
+  const w7=win(7), w14=win(14), w28=win(28), wAll=win(days+1);
+  const part=(lb,w,n)=>lb+': '+(w.avg!=null?w.avg+' kcal ('+w.n+' de '+n+' dias registrados)':'sem registro');
+  L.push('Calorias ingeridas (só dias completos) — '+part('7 dias',w7,Math.min(7,days+1))+'; '+part('14 dias',w14,Math.min(14,days+1))+'; '+part('28 dias',w28,Math.min(28,days+1))+'; '+part('dieta toda',wAll,days+1)+'.');
+  if(w14.n){
+    const diffs=w14.ds.map(d=>+diet.entries[d].kcal-M.goal);
+    const over=diffs.filter(x=>x>M.goal*0.1).length, under=diffs.filter(x=>x<-M.goal*0.1).length;
+    L.push('Aderência nos últimos 14 dias (vs. meta atual de '+M.goal+'): desvio médio '+sg(Math.round(diffs.reduce((a,b)=>a+b,0)/diffs.length))+' kcal; '+over+' dias mais de 10% acima, '+under+' dias mais de 10% abaixo; maior dia '+Math.max(...w14.ds.map(d=>+diet.entries[d].kcal))+', menor '+Math.min(...w14.ds.map(d=>+diet.entries[d].kcal))+' kcal.');
+  }
+  const inc=all.filter(d=>d>=start&&diet.entries[d].inc).length;
+  if(inc)L.push('Dias marcados como incompletos (fora das contas): '+inc+'.');
+  L.push(w28.pn?'Proteína registrada (28 dias): média '+w28.pavg+' g em '+w28.pn+' dias (meta '+M.prot+' g).':'Proteína: o atleta não registra a proteína ingerida, só a meta existe.');
+  /* gasto */
+  L.push(t?'Gasto estimado pelos dados (peso-tendência × ingestão, janela de '+t.days+' dias): ~'+t.tdee+' kcal/dia, confiança '+Math.round(t.conf*100)+'%. Gasto que as metas atuais assumem: '+priorTDEE()+' kcal (o app aproxima um do outro aos poucos, 1/3 da diferença por check-in).'+(w14.avg!=null?' Balanço real estimado nos últimos 14 dias: '+sg(w14.avg-t.tdee)+' kcal/dia.':'')
+    :'Gasto estimado: ainda calibrando (faltam pesagens ou dias de kcal nas últimas 4 semanas). Gasto que as metas assumem: '+priorTDEE()+' kcal (estimativa inicial informada: '+s.tdee0+').');
+  /* semana a semana */
+  const rows=[];
+  for(let k=0;k<8;k++){
+    const e=isoLocal(today);e.setDate(e.getDate()-7*k);const b=new Date(e);b.setDate(b.getDate()-6);
+    const from=dISO(b), to=dISO(e);
+    if(to<start)break;
+    const ds=all.filter(d=>d>=from&&d<=to&&d>=start);
+    const ws=ds.filter(d=>hasW(diet.entries[d])), ks=ds.filter(d=>hasK(diet.entries[d]));
+    const te=trendAt(to);
+    rows.push(dmy(from)+'–'+dmy(to)+': '+(ws.length?'peso médio '+n1(ws.reduce((x,d)=>x+ +diet.entries[d].weight,0)/ws.length)+' kg ('+ws.length+' pesagens)':'sem pesagem')+(te!=null?', tendência '+n1(te):'')+'; '+(ks.length?'kcal média '+Math.round(ks.reduce((x,d)=>x+ +diet.entries[d].kcal,0)/ks.length)+' ('+ks.length+' dias)':'sem kcal'));
+  }
+  if(rows.length)L.push('Semana a semana (da mais recente para a mais antiga):\n- '+rows.join('\n- '));
+  /* check-ins */
+  const cks=(s.checkins||[]).slice(-8);
+  L.push(cks.length?'Check-ins semanais (os mais recentes por último): '+cks.map(c=>dmy(c.date)+' '+c.prevGoal+'→'+c.goal+' kcal'+(c.applied?'':' (optou por manter)')+(c.tdee?' [gasto '+c.tdee+']':'')).join(' | ')+'.':'Check-ins semanais: nenhum feito ainda.');
+  return 'DIETA\n'+L.join('\n');
+}
+function buildTrainContext(){
+  const L=[], p=diet.settings.profile, tr=computeTrend(), twd=Object.keys(tr).sort();
+  const wkg=twd.length?tr[twd[twd.length-1]]:(p&&p.w);
+  L.push('Perfil: '+((p&&p.sex==='f')?'mulher':'homem')+(p&&p.h?', '+p.h+' cm':'')+(wkg?', ~'+(+wkg).toFixed(0)+' kg':'')+(p&&p.bf!=null?', ~'+p.bf+'% de gordura':'')+'; intermediário, natural. Objetivo estético: V-taper (latíssimo e deltoide lateral prioritários; perna em manutenção deliberada).');
+  L.push('Método: dupla progressão autorregulada — faixa de reps + RIR alvo; ao dominar o topo da faixa em todas as séries de trabalho, sobe a carga. O programa foi montado pelo atleta no Hevy; o app só faz a periodização.');
+  const ds=dietStartISO(), s=diet.settings;
+  L.push('Pano de fundo (só para pesar fadiga e recuperação, não analise a dieta): '+(s.mode==='deficit'?'em déficit calórico':(s.mode==='surplus'?'em superávit calórico':'em manutenção calórica'))+(ds&&s.mode!=='maint'?' há ~'+(Math.max(0,daysBetween(ds,todayISO()))/7).toFixed(0)+' semanas':'')+'.');
   for(const wo of program){
-    lines.push('\nTreino '+wo.name+':');
+    L.push('\nTreino '+wo.name+':');
     for(const ex of wo.exercises){
       const prev=lastEntries(ex.id,8).reverse();
-      const hist=prev.map(p=>{
-        const w=Math.max(...p.sets.map(s=>+s.w||0));
-        const reps=p.sets.filter(s=>s.r!=null).map(s=>s.r).join('/');
-        const rirs=p.sets.filter(s=>s.rir!=null).map(s=>s.rir).join('/');
-        return new Date(p.date).toLocaleDateString('pt-BR').slice(0,5)+': '+fmt(w)+'kg×'+reps+' (RIR '+(rirs||'?')+')';
+      const hist=prev.map(q=>{
+        const w=Math.max(...q.sets.map(x=>+x.w||0));
+        const reps=q.sets.filter(x=>x.r!=null&&x.r!=='').map(x=>x.r).join('/');
+        const rirs=q.sets.filter(x=>x.rir!=null&&x.rir!=='').map(x=>x.rir).join('/');
+        return new Date(q.date).toLocaleDateString('pt-BR').slice(0,5)+': '+fmt(w)+'kg×'+reps+' (RIR '+(rirs||'?')+')';
       }).join(' | ');
-      lines.push('- '+ex.name+' [alvo '+ex.sets+'×'+ex.repMin+'-'+ex.repMax+' RIR '+ex.rirMin+'-'+ex.rirMax+']: '+(hist||'sem registros ainda'));
+      let sug='';
+      if(prev.length){try{const g=suggest(ex);sug=' → app sugere: '+g.label+(g.w!=null?' ('+fmt(g.w)+' kg)':'')}catch(_){}}
+      L.push('- '+ex.name+' [alvo '+ex.sets+'×'+ex.repMin+'-'+ex.repMax+', RIR '+ex.rirMin+'-'+ex.rirMax+']: '+(hist||'sem registros ainda')+sug);
     }
   }
-  const t=computeTDEE(), wr=weeklyRate(), MM=currentTargets(), tr=computeTrend();
-  const twd=Object.keys(tr).sort();
-  if(twd.length){
-    lines.push('\nDieta: peso tendência atual '+tr[twd[twd.length-1]].toFixed(1)+' kg'
-      +(wr!=null?' | ritmo '+(wr>0?'+':'')+wr.toFixed(2)+' kg/sem':'')
-      +(t?' | TDEE observado ~'+t.tdee+' kcal (média ingerida '+t.avgK+' kcal, janela '+t.days+'d)':' | TDEE ainda em calibração')
-      +' | objetivo: '+diet.settings.mode+' '+diet.settings.rate+' kg/sem | metas da semana (revistas no check-in semanal): '+MM.goal+' kcal, P '+MM.prot+'g / C '+MM.carbs+'g / G '+MM.fatG+'g');
-  }
-  const ck=(diet.settings.checkins||[]).slice(-1)[0];
-  if(ck)lines.push('Último check-in semanal ('+dmy(ck.date)+'): meta '+ck.prevGoal+' → '+ck.goal+' kcal'+(ck.applied?'':' (atleta optou por manter)'));
-  const dates=[...new Set(history.map(h=>new Date(h.date).toLocaleDateString('pt-BR')))];
-  lines.push('\nTotal de sessões registradas: '+history.length+(dates.length?' | Últimas datas: '+dates.slice(-12).join(', '):''));
-  return lines.join('\n');
+  /* frequência: sessões por semana nas últimas 6 semanas */
+  const now=Date.now(), perWeek=[];
+  for(let k=0;k<6;k++)perWeek.push(new Set(history.filter(h=>{const a=(now-new Date(h.date).getTime())/86400000;return a>=7*k&&a<7*(k+1)}).map(h=>new Date(h.date).toDateString())).size);
+  const dates=[...new Set(history.map(h=>new Date(h.date).toLocaleDateString('pt-BR').slice(0,5)))];
+  L.push('\nFrequência: '+history.length+' sessões registradas no total. Dias de treino por semana, da semana atual para trás: '+perWeek.join(', ')+'.'+(dates.length?' Últimas datas: '+dates.slice(-12).join(', ')+'.':''));
+  return 'TREINO\n'+L.join('\n');
 }
-async function runAI(question){
-  const target=document.getElementById('aires');
-  target.innerHTML='<div class="card"><div class="note"><span class="spin"></span>Analisando seu histórico…</div></div>';
-  const sys='Você é um coach de musculação baseado em evidências (Helms, Israetel, Schoenfeld). Responda em português brasileiro, direto e prático, em no máximo ~300 palavras. Aponte estagnações, padrões de RIR/fadiga e ações concretas com números. Use **negrito** e listas curtas quando ajudar. Não repita os dados de volta; interprete-os.';
-  const user=buildContext()+'\n\n'+(question?('Pergunta do atleta: '+question):'Faça uma análise do progresso: o que evolui, o que estagnou, padrão de RIR e risco de fadiga em déficit, e 2-3 ações concretas para as próximas 2 semanas.');
+const AI_SYS={
+  diet:'Você é um coach de nutrição esportiva baseado em evidências (Helms, Aragon, Trexler) que conhece a lógica do MacroFactor (peso-tendência, gasto adaptativo, check-in semanal). Responda em português brasileiro, direto e prático, em no máximo ~350 palavras. Analise SOMENTE a dieta, com base nos dados enviados: (1) o ritmo real de peso contra o alvo e se ele é adequado em % do peso por semana; (2) aderência às calorias e à proteína; (3) qualidade dos registros (pesagens e dias de kcal) e o quanto dá para confiar no gasto estimado; (4) o tempo de dieta — sinais de fadiga de dieta e se já cabe uma pausa em manutenção; (5) se as metas de macros fazem sentido; (6) 2 ou 3 ações concretas, com números, para as próximas 2 semanas. Não invente dados: se faltar registro para concluir algo, diga o que falta. Não repita os dados de volta; interprete-os. Use **negrito** e listas curtas quando ajudar.',
+  train:'Você é um coach de musculação baseado em evidências (Helms, Israetel, Schoenfeld). Responda em português brasileiro, direto e prático, em no máximo ~350 palavras. Analise SOMENTE o treino, com base nos dados enviados: (1) o que está evoluindo; (2) o que estagnou e por quê; (3) padrão de RIR e sinais de fadiga; (4) frequência e regularidade; (5) 2 ou 3 ações concretas, com cargas e reps, para as próximas 2 semanas. Não comente calorias nem macros. Não invente dados: se faltar registro, diga o que falta. Não repita os dados de volta; interprete-os. Use **negrito** e listas curtas quando ajudar.',
+  ask:'Você é um coach de musculação e nutrição esportiva baseado em evidências (Helms, Israetel, Schoenfeld, Trexler). Responda em português brasileiro, direto e prático, em no máximo ~300 palavras, usando os dados de dieta e treino enviados. Não invente dados. Use **negrito** e listas curtas quando ajudar.'
+};
+async function geminiCall(model,sys,user){
+  /* corpo mínimo de propósito: os modelos novos ignoram ou recusam temperature/top_p, e o raciocínio do modelo consome o limite de tokens de saída */
+  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+    body:JSON.stringify({system_instruction:{parts:[{text:sys}]},contents:[{role:'user',parts:[{text:user}]}]})
+  });
+  if(!r.ok){
+    let detail='';try{const eb=await r.json();detail=eb?.error?.message||''}catch(_){}
+    const e=new Error('HTTP '+r.status+(detail?' — '+detail.slice(0,180):''));e.status=r.status;e.detail=detail;throw e;
+  }
+  const data=await r.json(), c=data.candidates?.[0];
+  const text=(c?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('\n').trim();
+  if(!text)throw new Error(c?.finishReason==='SAFETY'?'resposta bloqueada por filtro de segurança':(c?.finishReason==='MAX_TOKENS'?'resposta cortada pelo limite de tokens':'resposta vazia do modelo'));
+  return text;
+}
+async function askGemini(sys,user){
+  const models=[...new Set([aiRetired(aiModel)?null:aiModel,...AI_MODELS].filter(Boolean))], tried=[];
+  for(const m of models){
+    try{
+      const text=await geminiCall(m,sys,user);
+      if(m!==aiModel){aiModel=m;await sSet(K_MODEL,m)} /* guarda o modelo que funcionou */
+      return{text,model:m};
+    }catch(e){
+      tried.push(m+': '+(e&&e.message?e.message:'erro de rede'));
+      const keyBad=/api key|api_key|permission denied|unauthenticated/i.test((e&&e.detail)||'')||(e&&(e.status===401));
+      /* só vale trocar de modelo quando o problema é do modelo (não existe, sem cota, parâmetro recusado, sobrecarga) */
+      if(keyBad||!e||!e.status||![400,403,404,429,500,503].includes(e.status)){const x=new Error(tried[tried.length-1]);x.tried=tried;x.keyBad=keyBad;throw x}
+    }
+  }
+  const x=new Error('nenhum modelo respondeu');x.tried=tried;throw x;
+}
+async function runAI(kind,question){
+  const target=document.getElementById('aires-'+kind), K=AI_KIND[kind];
   if(!apiKey){
-    target.innerHTML='<div class="card"><div class="note">Configure primeiro a <b>chave do Gemini</b> na seção abaixo (aistudio.google.com → Get API key, gratuita). Depois é só clicar de novo.</div></div>';
+    target.innerHTML='<p class="note" style="margin-top:12px">Configure primeiro a <b>chave do Gemini</b> no fim desta página (aistudio.google.com → Get API key, gratuita). Depois é só tocar de novo.</p>';
     return;
   }
+  target.innerHTML='<p class="note" style="margin-top:12px"><span class="spin"></span>'+K.busy+'</p>';
   try{
-    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(aiModel)+':generateContent?key='+encodeURIComponent(apiKey),{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        system_instruction:{parts:[{text:sys}]},
-        contents:[{role:'user',parts:[{text:user}]}],
-        generationConfig:{maxOutputTokens:8192,temperature:0.6}
-      })
-    });
-    if(!r.ok){
-      let detail='';try{const eb=await r.json();detail=eb?.error?.message||''}catch(_){}
-      throw new Error('HTTP '+r.status+(detail?' — '+detail.slice(0,180):''));
-    }
-    const data=await r.json();
-    const text=(data.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('\n').trim();
-    if(!text)throw new Error(data.candidates?.[0]?.finishReason==='SAFETY'?'resposta bloqueada por filtro de segurança':'resposta vazia do modelo');
-    lastAI=mdToHtml(text);
-    target.innerHTML='<div class="card"><h3>'+(question?'Resposta':'Análise do progresso')+'</h3><div class="ai-out">'+lastAI+'</div></div>';
+    const user=kind==='diet'?buildDietContext()+'\n\nFaça a análise da dieta.'
+      :kind==='train'?buildTrainContext()+'\n\nFaça a análise do treino.'
+      :buildDietContext()+'\n\n'+buildTrainContext()+'\n\nPergunta do atleta: '+question;
+    const res=await askGemini(AI_SYS[kind],user);
+    lastAI[kind]={html:mdToHtml(res.text),when:new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),model:res.model};
+    const el=document.getElementById('aires-'+kind);if(el)el.innerHTML=aiResHtml(kind);
   }catch(e){
-    const diag=e&&e.message?esc(e.message):'erro de rede';
-    target.innerHTML='<div class="card"><div class="note"><b>Falha na chamada:</b> <span class="tag">'+diag+'</span><br><br>'
-      +'Confira: (1) a chave está correta e ativa no aistudio.google.com; (2) o nome do modelo existe — tente <span class="tag">gemini-2.5-flash</span> ou <span class="tag">gemini-2.0-flash</span>; (3) o limite do free tier não foi atingido (renova diariamente).'
-      +'</div></div>';
+    const el=document.getElementById('aires-'+kind);if(!el)return;
+    const tried=(e&&e.tried)||[(e&&e.message)||'erro de rede'];
+    el.innerHTML='<p class="note" style="margin-top:12px"><b>Não deu para analisar.</b><br>'+tried.map(x=>'<span class="tag" style="display:inline-block;margin-top:6px">'+esc(x)+'</span>').join('<br>')+'<br><br>'
+      +(e&&e.keyBad?'A chave do Gemini foi recusada. Confira ou crie outra em aistudio.google.com e salve no fim desta página.'
+        :'Confira: (1) a chave está correta e ativa em aistudio.google.com; (2) o limite gratuito do dia não foi atingido (renova diariamente); (3) a internet está funcionando.')+'</p>';
   }
 }
 function mdToHtml(md){
@@ -1445,6 +1563,7 @@ function renderDiet(){
       <div class="dfld"><label>TDEE inicial</label><input type="number" id="dtdee0" value="${s.tdee0}"></div>
       <div class="dfld"><label>Piso de calorias</label><select id="dfloor" class="dsel"><option value="${KCAL_FLOOR_STD}" ${kcalFloor()?'selected':''}>${fmt(KCAL_FLOOR_STD)} kcal</option><option value="0" ${kcalFloor()?'':'selected'}>Sem piso</option></select></div>
     </div>
+    <div class="dfld" style="margin-top:10px"><label>Início da dieta (usado na análise)</label><input type="date" id="dstart" value="${dietStartISO()||''}" max="${today}"></div>
     <p class="note" style="margin-top:10px;font-size:13px">Recomposição: déficit de 0,25–0,5 kg/sem. Superávit magro: 0,1–0,25 kg/sem. Mudar objetivo, taxa ou macros não recomeça nada: o gasto que os check-ins vêm ajustando continua valendo e o dia do check-in não muda. O TDEE inicial só vale até o algoritmo convergir (~2–3 semanas). Piso de calorias: nenhuma meta do app fica abaixo dele (padrão do MacroFactor: 1.200 kcal).</p>
     <details>
       <summary>Calcular TDEE inicial (perfil + atividade)</summary>
@@ -1531,6 +1650,8 @@ function renderDiet(){
     const fp=numBR(document.getElementById('dfat').value);
     diet.settings.fatPct=Math.min(45,Math.max(15,fp!=null?fp:25));
     const td=numBR(document.getElementById('dtdee0').value);
+    const dsv=document.getElementById('dstart').value, dd0=dietDates()[0];
+    diet.settings.dietStart=dsv&&dsv!==dd0?dsv:null; /* igual ao primeiro registro (ou vazio) = automático */
     diet.settings.protTarget=null;
     const restarted=td!=null&&td>800&&applyTdee0(Math.round(td));
     if(!restarted)retarget(); /* o gasto aprendido nos check-ins continua valendo */
