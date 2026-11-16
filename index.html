@@ -1102,8 +1102,10 @@ function buildDietContext(){
   if(inc)L.push('Dias marcados como incompletos (fora das contas): '+inc+'.');
   L.push(w28.pn?'Proteína registrada (28 dias): média '+w28.pavg+' g em '+w28.pn+' dias (meta '+M.prot+' g).':'Proteína: o atleta não registra a proteína ingerida, só a meta existe.');
   /* gasto */
-  L.push(t?'Gasto estimado pelos dados (peso-tendência × ingestão, janela de '+t.days+' dias): ~'+t.tdee+' kcal/dia, confiança '+Math.round(t.conf*100)+'%. Gasto que as metas atuais assumem: '+priorTDEE()+' kcal (o app aproxima um do outro aos poucos, 1/3 da diferença por check-in).'+(w14.avg!=null?' Balanço real estimado nos últimos 14 dias: '+sg(w14.avg-t.tdee)+' kcal/dia.':'')
+  L.push(t?'Gasto estimado pelos dados (peso-tendência × ingestão, só os '+t.span+' dias até a última pesagem): ~'+t.tdee+' kcal/dia, confiança '+Math.round(t.conf*100)+'%. Nessa janela há comida registrada em '+t.nK+' de '+t.span+' dias ('+Math.round(t.cover*100)+'%) — abaixo de 80% a confiança cai. Gasto que as metas atuais assumem: '+priorTDEE()+' kcal (o app aproxima um do outro aos poucos, 1/3 da diferença por check-in).'+(w14.avg!=null?' Balanço real estimado nos últimos 14 dias: '+sg(w14.avg-t.tdee)+' kcal/dia.':'')
     :'Gasto estimado: ainda calibrando (faltam pesagens ou dias de kcal nas últimas 4 semanas). Gasto que as metas assumem: '+priorTDEE()+' kcal (estimativa inicial informada: '+s.tdee0+').');
+  const ck=s.lastCoach&&s.lastCoach.goal?computeCheckin():null;
+  L.push('Como o app trata dias sem registro (mesmo critério do MacroFactor): dia sem pesagem é interpolado entre as pesagens vizinhas; dia sem kcal fica fora da média, ou seja, é tratado como igual aos dias registrados (se o atleta deixa de anotar justamente os dias em que come mais, o gasto sai subestimado); registros antigos não entram na conta atual. As metas só mudam no check-in semanal, que fica pausado sem 1 pesagem e 4 dias completos de kcal nos últimos 7 dias'+(ck?' — agora: '+ck.nW7+' pesagem(ns) e '+ck.nK7+' dia(s) de kcal, check-in '+(ck.paused?'PAUSADO (metas congeladas)':'liberado'):'')+'.');
   /* semana a semana */
   const rows=[];
   for(let k=0;k<8;k++){
@@ -1151,7 +1153,7 @@ function buildTrainContext(){
   return 'TREINO\n'+L.join('\n');
 }
 const AI_SYS={
-  diet:'Você é um coach de nutrição esportiva baseado em evidências (Helms, Aragon, Trexler) que conhece a lógica do MacroFactor (peso-tendência, gasto adaptativo, check-in semanal). Responda em português brasileiro, direto e prático, em no máximo ~350 palavras. Analise SOMENTE a dieta, com base nos dados enviados: (1) o ritmo real de peso contra o alvo e se ele é adequado em % do peso por semana; (2) aderência às calorias e à proteína; (3) qualidade dos registros (pesagens e dias de kcal) e o quanto dá para confiar no gasto estimado; (4) o tempo de dieta — sinais de fadiga de dieta e se já cabe uma pausa em manutenção; (5) se as metas de macros fazem sentido; (6) 2 ou 3 ações concretas, com números, para as próximas 2 semanas. Não invente dados: se faltar registro para concluir algo, diga o que falta. Não repita os dados de volta; interprete-os. Use **negrito** e listas curtas quando ajudar.',
+  diet:'Você é um coach de nutrição esportiva baseado em evidências (Helms, Aragon, Trexler) que conhece a lógica do MacroFactor (peso-tendência, gasto adaptativo, check-in semanal). Responda em português brasileiro, direto e prático, em no máximo ~350 palavras. Analise SOMENTE a dieta, com base nos dados enviados: (1) o ritmo real de peso contra o alvo e se ele é adequado em % do peso por semana; (2) aderência às calorias e à proteína; (3) qualidade dos registros e o quanto dá para confiar no gasto estimado — julgue pelas últimas 4 semanas (só elas entram na conta), não pela dieta inteira, e diga se os dias em branco podem estar puxando o gasto para baixo; (4) o tempo de dieta — sinais de fadiga de dieta e se já cabe uma pausa em manutenção; (5) se as metas de macros fazem sentido; (6) 2 ou 3 ações concretas, com números, para as próximas 2 semanas. Não invente dados: se faltar registro para concluir algo, diga o que falta. Não repita os dados de volta; interprete-os. Use **negrito** e listas curtas quando ajudar.',
   train:'Você é um coach de musculação baseado em evidências (Helms, Israetel, Schoenfeld). Responda em português brasileiro, direto e prático, em no máximo ~350 palavras. Analise SOMENTE o treino, com base nos dados enviados: (1) o que está evoluindo; (2) o que estagnou e por quê; (3) padrão de RIR e sinais de fadiga; (4) frequência e regularidade; (5) 2 ou 3 ações concretas, com cargas e reps, para as próximas 2 semanas. Não comente calorias nem macros. Não invente dados: se faltar registro, diga o que falta. Não repita os dados de volta; interprete-os. Use **negrito** e listas curtas quando ajudar.',
   ask:'Você é um coach de musculação e nutrição esportiva baseado em evidências (Helms, Israetel, Schoenfeld, Trexler). Responda em português brasileiro, direto e prático, em no máximo ~300 palavras, usando os dados de dieta e treino enviados. Não invente dados. Use **negrito** e listas curtas quando ajudar.'
 };
@@ -1220,7 +1222,7 @@ function mdToHtml(md){
 }
 
 /* ============ diet / adaptive TDEE (MacroFactor-style) ============ */
-const KCAL_PER_KG=7700, EWMA_ALPHA=0.2;
+const KCAL_PER_KG=7700, EWMA_ALPHA=0.2, TDEE_FULL_COVER=0.8;
 async function saveDiet(){await sSet(K_DIET,diet)}
 const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 function dietDates(){return Object.keys(diet.entries).sort()}
@@ -1263,10 +1265,17 @@ function computeTDEE(){
   const avgK=kd.reduce((s,d)=>s+ +diet.entries[d].kcal,0)/kd.length;
   const observed=avgK-slope*KCAL_PER_KG;
   /* confiança cresce com nº de dias de kcal, nº de pesagens e amplitude da janela (cheia com ~3 semanas).
-     O que falta de confiança fica com o gasto que as metas atuais já assumem — pouco dado, pouca mudança. */
-  const conf=Math.min(1,kd.length/14)*Math.min(1,win.length/10)*Math.min(1,days/21);
+     O que falta de confiança fica com o gasto que as metas atuais já assumem — pouco dado, pouca mudança.
+     Dia sem kcal fica fora da média (como no MacroFactor), o que supõe que ele foi igual aos registrados. Uma média simples
+     só se sustenta com ~80% dos dias preenchidos (teste do próprio MacroFactor com o algoritmo V2): abaixo disso a confiança cai junto. */
+  const span=Math.round(days)+1, cover=kd.length/span;
+  const conf=Math.min(1,kd.length/14,cover/TDEE_FULL_COVER)*Math.min(1,win.length/10)*Math.min(1,days/21);
   const tdee=Math.round(conf*observed+(1-conf)*priorTDEE());
-  return{tdee,observed:Math.round(observed),conf,avgK:Math.round(avgK),days:Math.round(days),nK:kd.length};
+  return{tdee,observed:Math.round(observed),conf,avgK:Math.round(avgK),days:Math.round(days),nK:kd.length,span,cover};
+}
+function coverNote(t){ /* aviso quando faltam dias de comida na janela do gasto; '' se a cobertura é boa */
+  if(!t||t.cover>=TDEE_FULL_COVER)return '';
+  return `Comida registrada em <b>${t.nK} de ${t.span} dias</b> da janela. Os dias em branco entram como se fossem iguais aos registrados: se neles você comeu mais, o gasto sai mais baixo que o real. Vale anotar um valor aproximado nesses dias.`;
 }
 function weeklyRate(){
   const trend=computeTrend();
@@ -1467,6 +1476,7 @@ function checkinCard(){
   facts.push(c.t?['Gasto estimado',`${c.tdeePrev?fmt(c.tdeePrev)+' → ':''}${fmt(c.t.tdee)} kcal`,`confiança ${(c.t.conf*100).toFixed(0)}%`]:['Gasto estimado','calibrando','metas mantidas']);
   if(c.avgK!=null)facts.push(['Média ingerida',`${fmt(c.avgK)} kcal`,`${c.nK} ${c.nK===1?'dia completo':'dias completos'}`]);
   if(c.nW<3||c.nK<4)warn.push(`⚠️ Poucos registros desde o último check-in (${c.nW} pesagens, ${c.nK} dias de kcal) — o gasto estimado se apoia mais nas semanas anteriores.`);
+  if(coverNote(c.t))warn.push('⚠️ '+coverNote(c.t));
   if(c.floored)warn.push(`<b>Piso de calorias:</b> a meta não fica abaixo de ${fmt(kcalFloor())} kcal. Para manter o ritmo escolhido seria preciso comer menos que isso; se quiser, reduza o ritmo em "Objetivo e metas".`);
   if(c.smooth!==c.gap)warn.push(`Ajuste gradual: o gasto estimado pede ${sg(c.gap)} kcal, e este check-in aplica ${c.sure?'metade (3ª semana seguida no mesmo sentido)':'um terço'}${Math.abs(c.smooth)===CK_MAX_STEP?', até o limite de '+CK_MAX_STEP+' kcal':''}. O restante só entra nos próximos se a tendência se confirmar.`);
   warn.push('O ajuste vem do gasto estimado (peso-tendência × ingestão), não de ter batido a meta.');
@@ -1543,7 +1553,7 @@ function renderDiet(){
     </div>
     <div class="legend"><span><span class="dt" style="background:var(--chart-dot)"></span>pesagens</span><span><span class="sq" style="height:3px;width:14px;border-radius:2px;vertical-align:3px"></span>tendência (o que importa)</span></div>
     <div class="coach">${
-      t?`Gasto estimado <b>~${fmt(t.tdee)} kcal/dia</b> — confiança ${(t.conf*100).toFixed(0)}%${t.conf<1?', converge com mais registros':''}. Média ingerida ${fmt(t.avgK)} kcal em ${t.nK} dias completos (janela de ${t.days} dias).${rateOk!=null&&rateOk>0.75&&s.mode==='deficit'?' <b>⚠️ Ritmo acima de 0,75% do peso por semana</b> — risco de perder massa; reduza o déficit.':''}`
+      t?`Gasto estimado <b>~${fmt(t.tdee)} kcal/dia</b> — confiança ${(t.conf*100).toFixed(0)}%${t.conf<1?', converge com mais registros':''}. Média ingerida ${fmt(t.avgK)} kcal em ${t.nK} dias completos (janela de ${t.span} dias).${coverNote(t)&&!(ckPending&&!ckPaused)?' ⚠️ '+coverNote(t):''}${rateOk!=null&&rateOk>0.75&&s.mode==='deficit'?' <b>⚠️ Ritmo acima de 0,75% do peso por semana</b> — risco de perder massa; reduza o déficit.':''}`
       :`Calibrando: registre <b>peso diário</b> e <b>kcal</b>. O gasto aparece com ~4 pesagens em 7+ dias e 4 dias completos de kcal, e ganha confiança em 2–3 semanas. Até lá as metas atuais ficam como estão. Registros com peso: ${nEntries}.`
     }</div>
   </div>
