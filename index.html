@@ -1144,9 +1144,10 @@ function computeTDEE(){
   const slope=olsSlope(win.map(d=>[(new Date(d).getTime()-endT)/86400000,trend[d]])); /* kg/dia via regressão */
   const avgK=kd.reduce((s,d)=>s+ +diet.entries[d].kcal,0)/kd.length;
   const observed=avgK-slope*KCAL_PER_KG;
-  /* confiança cresce com nº de dias de kcal, nº de pesagens e amplitude da janela */
-  const conf=Math.min(1,kd.length/12)*Math.min(1,win.length/10)*Math.min(1,days/14);
-  const tdee=Math.round(conf*observed+(1-conf)*diet.settings.tdee0);
+  /* confiança cresce com nº de dias de kcal, nº de pesagens e amplitude da janela (cheia com ~3 semanas).
+     O que falta de confiança fica com o gasto que as metas atuais já assumem — pouco dado, pouca mudança. */
+  const conf=Math.min(1,kd.length/14)*Math.min(1,win.length/10)*Math.min(1,days/21);
+  const tdee=Math.round(conf*observed+(1-conf)*priorTDEE());
   return{tdee,observed:Math.round(observed),conf,avgK:Math.round(avgK),days:Math.round(days),nK:kd.length};
 }
 function weeklyRate(){
@@ -1162,10 +1163,21 @@ function weeklyRate(){
 /* ---- metas + check-in semanal (MacroFactor-style) ----
    Kcal e macros ficam travados num snapshot (settings.lastCoach) e só mudam:
    (a) no check-in semanal, quando o usuário aplica a revisão; (b) ao mudar o objetivo/perfil.
+   O snapshot também guarda o gasto que as metas assumem (exp) — é ele que os check-ins vão corrigindo aos poucos.
+   Mudar objetivo, taxa ou macros NÃO recomeça nada: o gasto aprendido continua, só o déficit/superávit e a divisão
+   de macros são refeitos, e o ciclo do check-in segue igual. Só um TDEE inicial novo (com confirmação) recomeça.
    Nada aqui grava durante a renderização.
    Sem dados recentes o check-in fica pausado e as metas não mudam (mesmo critério do MacroFactor:
    1 pesagem e 4 dias de kcal completos em 7 dias). Ele abre sozinho quando o mínimo é atingido. */
-const CK_MAX_STEP=200, CK_MIN_DAYS=4, CK_MIN_WEIGH=1, CK_MIN_KCAL=4;
+const CK_MAX_STEP=150, CK_MIN_DAYS=4, CK_MIN_WEIGH=1, CK_MIN_KCAL=4;
+/* Suavização (como no MacroFactor, a meta não acompanha 1:1 o gasto estimado): cada check-in aplica 1/3 da diferença;
+   na 3ª semana seguida apontando para o mesmo lado, metade. CK_MAX_STEP é só uma trava de segurança. */
+const CK_SMOOTH=1/3, CK_SMOOTH_SURE=1/2;
+function checkinStreak(dir){ /* os 2 últimos check-ins foram aplicados, seguidos e no mesmo sentido? */
+  const h=(diet.settings.checkins||[]).slice(-2);
+  if(h.length<2||!dir)return false;
+  return h.every(x=>x.applied&&Math.sign(x.goal-x.prevGoal)===dir)&&daysBetween(h[0].date,h[1].date)<=10&&daysBetween(h[1].date,todayISO())<=10;
+}
 const isoLocal=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d,12)}; /* evita o fuso UTC de new Date('AAAA-MM-DD') */
 const daysBetween=(a,b)=>Math.round((isoLocal(b)-isoLocal(a))/86400000);
 const dmy=iso=>iso.slice(8,10)+'/'+iso.slice(5,7);
@@ -1174,18 +1186,57 @@ function rawGoal(base){
   const s=diet.settings, adj=s.rate*KCAL_PER_KG/7;
   return Math.round(s.mode==='deficit'?base-adj:(s.mode==='surplus'?base+adj:base));
 }
-function trendAt(iso){const tr=computeTrend();let v=null;for(const d of Object.keys(tr).sort()){if(d<=iso)v=tr[d];else break}return v}
-function buildTargets(goal){
-  const t=computeTDEE(), M=computeMacros({goal});
-  return{date:todayISO(),goal,prot:M.prot,carbs:M.carbs,fatG:M.fatG,wkg:M.wkg,tdee:t?t.tdee:diet.settings.tdee0,trend:trendAt(todayISO())};
+function priorTDEE(){ /* gasto que as metas vigentes assumem; sem metas, a estimativa inicial */
+  const s=diet.settings, lc=s.lastCoach;
+  if(!lc||!lc.goal)return s.tdee0;
+  if(lc.exp!=null)return lc.exp;
+  /* snapshot sem o gasto gravado: deduz da meta (meta ± déficit/superávit) */
+  const mode=lc.mode||s.mode, adj=(lc.rate!=null?lc.rate:s.rate)*KCAL_PER_KG/7;
+  return Math.round(mode==='deficit'?lc.goal+adj:(mode==='surplus'?lc.goal-adj:lc.goal));
 }
-function resetTargets(){ /* objetivo/perfil mudou: recalcula na hora, sem a trava de ±200 */
-  const t=computeTDEE();
-  diet.settings.lastCoach=buildTargets(rawGoal(t?t.tdee:diet.settings.tdee0));
+function stampCoach(){ /* metas antigas não guardavam objetivo/taxa: grava antes de mudá-los, para o gasto assumido não se perder */
+  const s=diet.settings, lc=s.lastCoach;
+  if(lc&&lc.mode==null){lc.mode=s.mode;lc.rate=s.rate}
+}
+function trendAt(iso){const tr=computeTrend();let v=null;for(const d of Object.keys(tr).sort()){if(d<=iso)v=tr[d];else break}return v}
+function buildTargets(goal,exp){ /* exp: gasto que estas metas assumem (pode ficar abaixo de meta+déficit quando a meta está no piso) */
+  const t=computeTDEE(), M=computeMacros({goal});
+  const o={date:todayISO(),goal,prot:M.prot,carbs:M.carbs,fatG:M.fatG,wkg:M.wkg,tdee:t?t.tdee:priorTDEE(),trend:trendAt(todayISO()),mode:diet.settings.mode,rate:diet.settings.rate};
+  if(exp!=null)o.exp=Math.round(exp);
+  return o;
+}
+/* Piso de calorias (como o "standard floor" do MacroFactor: 1200 kcal/dia, pode ser desligado).
+   Nenhuma meta calculada pelo app fica abaixo dele; se o ritmo escolhido pedir menos, a meta para no piso. */
+const KCAL_FLOOR_STD=1200;
+const kcalFloor=()=>{const v=diet.settings.kcalFloor;return v==null?KCAL_FLOOR_STD:+v||0};
+const floorGoal=g=>Math.max(kcalFloor(),g);
+function resetTargets(){ /* começo (ou recomeço pedido pelo usuário): metas direto do gasto estimado; sem dados, do TDEE inicial */
+  const base=(computeTDEE()||{tdee:priorTDEE()}).tdee;
+  diet.settings.lastCoach=buildTargets(floorGoal(rawGoal(base)),base);
+}
+function retarget(){ /* objetivo, taxa ou macros mudaram: mantém o gasto que os check-ins vinham ajustando e refaz só o
+  déficit/superávit e os macros. Data, gasto e peso de referência do último check-in ficam — o ciclo não reinicia.
+  Chamar depois de stampCoach() e de gravar os novos valores em settings. */
+  const s=diet.settings, lc=s.lastCoach;
+  if(!lc||!lc.goal){resetTargets();return}
+  const exp=priorTDEE(), asIs=lc.exp==null&&lc.mode===s.mode&&lc.rate===s.rate; /* snapshot antigo e nada de objetivo/taxa mudou: a meta fica como está */
+  s.lastCoach=Object.assign(buildTargets(floorGoal(asIs?lc.goal:rawGoal(exp)),exp),{date:lc.date,tdee:lc.tdee,trend:lc.trend});
+}
+function applyTdee0(v){ /* TDEE inicial novo: só recomeça as metas se o usuário confirmar (ou se ainda não houve check-in). Devolve true se recomeçou. */
+  const s=diet.settings, lc=s.lastCoach;
+  if(v===s.tdee0)return false;
+  s.tdee0=v;
+  s.lastCoach=null;resetTargets(); /* metas a partir do novo valor, misturado aos registros recentes na medida da confiança */
+  if(lc&&lc.goal&&(s.checkins||[]).length){
+    const t=computeTDEE(), w=t?Math.round(t.conf*100):0;
+    const how=w>=100?'Seus registros recentes já definem o gasto sozinhos, então o TDEE inicial não entra na conta.':(w>0?'Nessa conta, seus registros recentes pesam '+w+'% e o TDEE inicial, '+(100-w)+'%.':'Sem registros recentes suficientes, a conta usa só o TDEE inicial.');
+    if(!confirm('Recomeçar as metas a partir do novo TDEE inicial?\n\nOK — a meta passa de '+fmt(lc.goal)+' para '+fmt(s.lastCoach.goal)+' kcal e a semana do check-in recomeça hoje. '+how+'\n\nCancelar — o valor fica salvo, mas as metas continuam de onde os check-ins as deixaram.')){s.lastCoach=lc;return false}
+  }
+  return true;
 }
 function currentTargets(){ /* leitura pura das metas vigentes */
   const lc=diet.settings.lastCoach;
-  if(!lc||!lc.goal){const t=computeTDEE(), g=rawGoal(t?t.tdee:diet.settings.tdee0);return Object.assign({goal:g},computeMacros({goal:g}))}
+  if(!lc||!lc.goal){const t=computeTDEE(), g=floorGoal(rawGoal(t?t.tdee:diet.settings.tdee0));return Object.assign({goal:g},computeMacros({goal:g}))}
   if(lc.prot==null)return Object.assign({goal:lc.goal},computeMacros({goal:lc.goal})); /* snapshot antigo, só com kcal */
   const{prot,carbs,fatG}=lc;
   return{goal:lc.goal,prot,carbs,fatG,wkg:lc.wkg,kcal:prot*4+fatG*9+carbs*4,pk:prot*4,fk:fatG*9,ck:carbs*4};
@@ -1211,26 +1262,31 @@ function nextCheckin(){
 }
 function computeCheckin(){
   const s=diet.settings, lc=s.lastCoach, today=todayISO();
-  const t=computeTDEE(), raw=rawGoal(t?t.tdee:s.tdee0);
+  const t=computeTDEE(), exp0=priorTDEE(), est=t?t.tdee:exp0, raw=rawGoal(est);
   const d7=isoLocal(today);d7.setDate(d7.getDate()-6);
   const last7=dietDates().filter(d=>d>=dISO(d7)&&d<=today);
   const nW7=last7.filter(d=>diet.entries[d].weight!=null&&diet.entries[d].weight!=='').length;
   const nK7=last7.filter(d=>diet.entries[d].kcal!=null&&diet.entries[d].kcal!==''&&!diet.entries[d].inc).length;
   const paused=!t||nW7<CK_MIN_WEIGH||nK7<CK_MIN_KCAL;
-  const step=paused?0:Math.max(-CK_MAX_STEP,Math.min(CK_MAX_STEP,raw-lc.goal));
-  const cur=currentTargets(), nt=buildTargets(lc.goal+step);
+  /* o check-in corrige o gasto que as metas assumem (exp), um pedaço por vez; a meta sai dele (± déficit/superávit, com piso) */
+  const gap=est-exp0, sure=checkinStreak(Math.sign(gap));
+  const smooth=paused?0:Math.max(-CK_MAX_STEP,Math.min(CK_MAX_STEP,Math.round(gap*(sure?CK_SMOOTH_SURE:CK_SMOOTH))));
+  const expN=exp0+smooth, rawN=rawGoal(expN);
+  const floored=!paused&&rawN<kcalFloor(); /* a meta nova nunca fica abaixo do piso */
+  const step=paused?0:floorGoal(rawN)-lc.goal;
+  const cur=currentTargets(), nt=buildTargets(lc.goal+step,expN);
   const win=dietDates().filter(d=>d>lc.date&&d<=today);
   const nW=win.filter(d=>diet.entries[d].weight!=null&&diet.entries[d].weight!=='').length;
   const kd=win.filter(d=>diet.entries[d].kcal!=null&&diet.entries[d].kcal!==''&&!diet.entries[d].inc);
   const avgK=kd.length?Math.round(kd.reduce((a,d)=>a+ +diet.entries[d].kcal,0)/kd.length):null;
   const target=s.mode==='deficit'?-s.rate:(s.mode==='surplus'?s.rate:0);
-  return{paused,nW7,nK7,cur,nt,step,raw,t,days:daysBetween(lc.date,today),nW,nK:kd.length,avgK,
+  return{paused,nW7,nK7,gap,sure,smooth,floored,cur,nt,step,raw,exp0,t,days:daysBetween(lc.date,today),nW,nK:kd.length,avgK,
     trendPrev:lc.trend!=null?lc.trend:trendAt(lc.date),trendNow:nt.trend,tdeePrev:lc.tdee,rate:weeklyRate(),target};
 }
 async function doCheckin(accept){
   const s=diet.settings, prev=s.lastCoach, c=computeCheckin();
   if(c.paused)return;
-  const keep={goal:c.cur.goal,prot:c.cur.prot,carbs:c.cur.carbs,fatG:c.cur.fatG,wkg:c.cur.wkg};
+  const keep={goal:c.cur.goal,prot:c.cur.prot,carbs:c.cur.carbs,fatG:c.cur.fatG,wkg:c.cur.wkg,exp:c.exp0};
   s.lastCoach=accept?c.nt:Object.assign({},c.nt,keep); /* "manter" também registra o check-in e reinicia a semana */
   s.checkins=(s.checkins||[]).concat({date:s.lastCoach.date,prevGoal:prev.goal,goal:s.lastCoach.goal,prot:s.lastCoach.prot,carbs:s.lastCoach.carbs,fatG:s.lastCoach.fatG,
     tdee:c.t?c.t.tdee:null,trend:c.trendNow,avgK:c.avgK,nW:c.nW,nK:c.nK,applied:accept}).slice(-52);
@@ -1290,10 +1346,11 @@ function checkinCard(){
   const facts=[], warn=[];
   if(c.trendPrev!=null&&c.trendNow!=null){const dw=c.trendNow-c.trendPrev;facts.push(['Peso-tendência',`${fmt(c.trendPrev.toFixed(1))} → ${fmt(c.trendNow.toFixed(1))} kg`,`${sg(+dw.toFixed(2))} kg em ${c.days} dias`])}
   if(c.rate!=null){const gap=c.rate-c.target;facts.push(['Ritmo',`${sg(+c.rate.toFixed(2))} kg/sem`,`alvo ${sg(c.target)}${Math.abs(gap)<=0.1?' · dentro do alvo':(gap<0?' · abaixo do ritmo-alvo':' · acima do ritmo-alvo')}`])}
-  facts.push(c.t?['Gasto estimado',`${c.tdeePrev?fmt(c.tdeePrev)+' → ':''}${fmt(c.t.tdee)} kcal`,`confiança ${(c.t.conf*100).toFixed(0)}%`]:['Gasto estimado','calibrando',`usa a estimativa inicial (${fmt(s.tdee0)} kcal)`]);
+  facts.push(c.t?['Gasto estimado',`${c.tdeePrev?fmt(c.tdeePrev)+' → ':''}${fmt(c.t.tdee)} kcal`,`confiança ${(c.t.conf*100).toFixed(0)}%`]:['Gasto estimado','calibrando','metas mantidas']);
   if(c.avgK!=null)facts.push(['Média ingerida',`${fmt(c.avgK)} kcal`,`${c.nK} ${c.nK===1?'dia completo':'dias completos'}`]);
   if(c.nW<3||c.nK<4)warn.push(`⚠️ Poucos registros desde o último check-in (${c.nW} pesagens, ${c.nK} dias de kcal) — o gasto estimado se apoia mais nas semanas anteriores.`);
-  if(c.raw!==c.nt.goal)warn.push(`Ajuste limitado a ±${CK_MAX_STEP} kcal por check-in; os ${fmt(Math.abs(c.raw-c.nt.goal))} kcal restantes entram nos próximos se a tendência se confirmar.`);
+  if(c.floored)warn.push(`<b>Piso de calorias:</b> a meta não fica abaixo de ${fmt(kcalFloor())} kcal. Para manter o ritmo escolhido seria preciso comer menos que isso; se quiser, reduza o ritmo em "Objetivo e metas".`);
+  if(c.smooth!==c.gap)warn.push(`Ajuste gradual: o gasto estimado pede ${sg(c.gap)} kcal, e este check-in aplica ${c.sure?'metade (3ª semana seguida no mesmo sentido)':'um terço'}${Math.abs(c.smooth)===CK_MAX_STEP?', até o limite de '+CK_MAX_STEP+' kcal':''}. O restante só entra nos próximos se a tendência se confirmar.`);
   warn.push('O ajuste vem do gasto estimado (peso-tendência × ingestão), não de ter batido a meta.');
   return `<div class="card hl">
     <div class="eyebrow">Check-in semanal</div>
@@ -1369,7 +1426,7 @@ function renderDiet(){
     <div class="legend"><span><span class="dt" style="background:var(--chart-dot)"></span>pesagens</span><span><span class="sq" style="height:3px;width:14px;border-radius:2px;vertical-align:3px"></span>tendência (o que importa)</span></div>
     <div class="coach">${
       t?`Gasto estimado <b>~${fmt(t.tdee)} kcal/dia</b> — confiança ${(t.conf*100).toFixed(0)}%${t.conf<1?', converge com mais registros':''}. Média ingerida ${fmt(t.avgK)} kcal em ${t.nK} dias completos (janela de ${t.days} dias).${rateOk!=null&&rateOk>0.75&&s.mode==='deficit'?' <b>⚠️ Ritmo acima de 0,75% do peso por semana</b> — risco de perder massa; reduza o déficit.':''}`
-      :`Calibrando: registre <b>peso diário</b> e <b>kcal</b>. O gasto aparece com ~4 pesagens em 7+ dias e 4 dias completos de kcal, e ganha confiança em 2–3 semanas. Até lá a meta usa a estimativa inicial (${fmt(s.tdee0)} kcal). Registros com peso: ${nEntries}.`
+      :`Calibrando: registre <b>peso diário</b> e <b>kcal</b>. O gasto aparece com ~4 pesagens em 7+ dias e 4 dias completos de kcal, e ganha confiança em 2–3 semanas. Até lá as metas atuais ficam como estão. Registros com peso: ${nEntries}.`
     }</div>
   </div>
   ${ckPending?'':ckHtml}
@@ -1386,9 +1443,9 @@ function renderDiet(){
     </div>
     <div class="dgrid" style="margin-top:10px">
       <div class="dfld"><label>TDEE inicial</label><input type="number" id="dtdee0" value="${s.tdee0}"></div>
-      <div class="dfld"></div>
+      <div class="dfld"><label>Piso de calorias</label><select id="dfloor" class="dsel"><option value="${KCAL_FLOOR_STD}" ${kcalFloor()?'selected':''}>${fmt(KCAL_FLOOR_STD)} kcal</option><option value="0" ${kcalFloor()?'':'selected'}>Sem piso</option></select></div>
     </div>
-    <p class="note" style="margin-top:10px;font-size:13px">Recomposição: déficit de 0,25–0,5 kg/sem. Superávit magro: 0,1–0,25 kg/sem. O TDEE inicial só vale até o algoritmo convergir (~2–3 semanas).</p>
+    <p class="note" style="margin-top:10px;font-size:13px">Recomposição: déficit de 0,25–0,5 kg/sem. Superávit magro: 0,1–0,25 kg/sem. Mudar objetivo, taxa ou macros não recomeça nada: o gasto que os check-ins vêm ajustando continua valendo e o dia do check-in não muda. O TDEE inicial só vale até o algoritmo convergir (~2–3 semanas). Piso de calorias: nenhuma meta do app fica abaixo dele (padrão do MacroFactor: 1.200 kcal).</p>
     <details>
       <summary>Calcular TDEE inicial (perfil + atividade)</summary>
       <div class="dgrid g3" style="margin-top:12px">
@@ -1410,7 +1467,7 @@ function renderDiet(){
         </select>
       </div>
       <button class="btn ghost" id="ccalc" style="margin-top:12px">Calcular e aplicar como TDEE inicial</button>
-      <p class="note" style="margin-top:8px;font-size:12.5px;color:var(--faint)">Com % de gordura usa Katch-McArdle (massa magra); sem, Mifflin-St Jeor. O resultado substitui o TDEE inicial e recalcula as metas.</p>
+      <p class="note" style="margin-top:8px;font-size:12.5px;color:var(--faint)">Com % de gordura usa Katch-McArdle (massa magra); sem, Mifflin-St Jeor. O resultado substitui o TDEE inicial; se já houver check-ins, o app pergunta antes de recomeçar as metas a partir dele.</p>
     </details>
     <button class="btn" id="dsetsave" style="margin-top:14px">Salvar objetivo</button>
   </details></div>
@@ -1450,13 +1507,23 @@ function renderDiet(){
     await saveDiet();await touchAndPush();
     toast('✓ Alimentação salva');renderDiet();
   };
-  view.querySelectorAll('.modegrid button').forEach(b=>b.onclick=async()=>{diet.settings.mode=b.dataset.m;resetTargets();await saveDiet();await touchAndPush();renderDiet()});
+  view.querySelectorAll('.modegrid button').forEach(b=>b.onclick=async()=>{if(b.dataset.m===diet.settings.mode)return;stampCoach();diet.settings.mode=b.dataset.m;retarget();await saveDiet();await touchAndPush();toast('✓ '+b.textContent+' — meta de '+fmt(diet.settings.lastCoach.goal)+' kcal');renderDiet()});
   const cka=document.getElementById('ckapply'), ckk=document.getElementById('ckkeep');
   if(cka)cka.onclick=()=>{cka.disabled=ckk.disabled=true;doCheckin(true)};
   if(ckk)ckk.onclick=()=>{cka.disabled=ckk.disabled=true;doCheckin(false)};
+  const dfl=document.getElementById('dfloor');
+  if(dfl)dfl.onchange=async()=>{ /* vale na hora: a meta só muda se o piso a estava segurando (ou passa a segurar); o gasto aprendido continua */
+    const s=diet.settings, g0=s.lastCoach&&s.lastCoach.goal;
+    s.kcalFloor=+dfl.value;
+    if(g0){stampCoach();retarget()}
+    const g1=s.lastCoach&&s.lastCoach.goal;
+    await saveDiet();await touchAndPush();
+    toast((kcalFloor()?'✓ Piso de '+fmt(kcalFloor())+' kcal':'✓ Piso desligado')+(g0&&g1!==g0?' — meta de '+fmt(g1)+' kcal':''));renderDiet();
+  };
   const ckd=document.getElementById('ckdow');
   if(ckd)ckd.onchange=async()=>{diet.settings.checkinDow=+ckd.value;await saveDiet();await touchAndPush();toast('✓ Check-in: '+ckd.options[ckd.selectedIndex].text.toLowerCase());renderDiet()};
   document.getElementById('dsetsave').onclick=async()=>{
+    stampCoach();
     const rv=numBR(document.getElementById('drate').value);
     diet.settings.rate=Math.min(1.2,Math.max(0.1,rv!=null?Math.abs(rv):0.4));
     const pk=numBR(document.getElementById('dpkg').value);
@@ -1464,11 +1531,11 @@ function renderDiet(){
     const fp=numBR(document.getElementById('dfat').value);
     diet.settings.fatPct=Math.min(45,Math.max(15,fp!=null?fp:25));
     const td=numBR(document.getElementById('dtdee0').value);
-    diet.settings.tdee0=td!=null&&td>800?Math.round(td):diet.settings.tdee0;
     diet.settings.protTarget=null;
-    resetTargets();
+    const restarted=td!=null&&td>800&&applyTdee0(Math.round(td));
+    if(!restarted)retarget(); /* o gasto aprendido nos check-ins continua valendo */
     await saveDiet();await touchAndPush();
-    toast('✓ Objetivo salvo — taxa '+fmt(diet.settings.rate)+' kg/sem');renderDiet();
+    toast('✓ Objetivo salvo — meta de '+fmt(diet.settings.lastCoach.goal)+' kcal'+(restarted?' (metas recomeçadas)':''));renderDiet();
   };
   view.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{dietRange=+b.dataset.r;renderDiet()});
   const cc=document.getElementById('ccalc');
@@ -1483,11 +1550,10 @@ function renderDiet(){
       bmr=sex==='f'?10*w+6.25*hcm-5*age-161:10*w+6.25*hcm-5*age+5; /* Mifflin-St Jeor */
     }
     const tdee=Math.round(bmr*act);
-    diet.settings.tdee0=tdee;
     diet.settings.profile={age,h:hcm,w,bf:bf!=null?bf:null,sex,act};
-    resetTargets();
+    const had=!!(diet.settings.lastCoach&&diet.settings.lastCoach.goal), restarted=applyTdee0(tdee);
     await saveDiet();await touchAndPush();
-    toast('✓ TDEE inicial: '+fmt(tdee)+' kcal/dia');
+    toast('✓ TDEE inicial: '+fmt(tdee)+' kcal/dia'+(had&&!restarted?' — metas mantidas':''));
     renderDiet();
   };
   view.querySelectorAll('.dhist .del').forEach(b=>b.onclick=async()=>{
